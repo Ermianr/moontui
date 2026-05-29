@@ -1,3 +1,4 @@
+use crate::color;
 use moontui_macros::{moontui_export, moontui_skip};
 
 pub const ATTR_CONTINUATION: u32 = 1 << 0;
@@ -22,8 +23,8 @@ impl OptimizedBuffer {
       width,
       height,
       chars: vec![0u32; size],
-      fg: vec![[0u16, 0, 0, 65535]; size],
-      bg: vec![[0u16, 0, 0, 65535]; size],
+      fg: vec![color::rgb_color(0, 0, 0, 255); size],
+      bg: vec![color::rgb_color(0, 0, 0, 255); size],
       attributes: vec![0u32; size],
     }
   }
@@ -34,7 +35,7 @@ impl OptimizedBuffer {
   /// @ts_body lib.symbols.bufferClear(p, rgbaPtr(bg))
   pub fn clear(&mut self, bg: &[u16; 4]) {
     self.chars.fill(0);
-    self.fg.fill([0, 0, 0, 65535]);
+    self.fg.fill(color::rgb_color(0, 0, 0, 255));
     self.bg.fill(*bg);
     self.attributes.fill(0);
   }
@@ -325,7 +326,7 @@ mod tests {
   #[test]
   fn test_buffer_clear() {
     let mut buf = OptimizedBuffer::new(5, 5);
-    let bg = [100, 100, 100, 65535];
+    let bg = color::rgb_color(100, 100, 100, 255);
     buf.clear(&bg);
     for i in 0..25 {
       assert_eq!(buf.chars[i], 0);
@@ -337,8 +338,8 @@ mod tests {
   #[test]
   fn test_draw_text_clipping() {
     let mut buf = OptimizedBuffer::new(5, 3);
-    let fg = [65535, 65535, 65535, 65535];
-    let bg = [0, 0, 0, 65535];
+    let fg = color::rgb_color(255, 255, 255, 255);
+    let bg = color::rgb_color(0, 0, 0, 255);
     buf.draw_text("Hello World", 0, 0, &fg, &bg, 0);
     assert_eq!(buf.chars[0], 'H' as u32);
     assert_eq!(buf.chars[4], 'o' as u32);
@@ -349,8 +350,8 @@ mod tests {
   #[test]
   fn test_wide_char_continuation() {
     let mut buf = OptimizedBuffer::new(10, 2);
-    let fg = [65535, 65535, 65535, 65535];
-    let bg = [0, 0, 0, 65535];
+    let fg = color::rgb_color(255, 255, 255, 255);
+    let bg = color::rgb_color(0, 0, 0, 255);
     buf.draw_text("あ", 0, 0, &fg, &bg, 0);
     assert_eq!(buf.chars[0], 'あ' as u32);
     assert_eq!(buf.attributes[0], 0);
@@ -360,8 +361,8 @@ mod tests {
   #[test]
   fn test_write_resolved_chars() {
     let mut buf = OptimizedBuffer::new(5, 2);
-    let fg = [65535, 65535, 65535, 65535];
-    let bg = [0, 0, 0, 65535];
+    let fg = color::rgb_color(255, 255, 255, 255);
+    let bg = color::rgb_color(0, 0, 0, 255);
     buf.draw_text("Hi", 0, 0, &fg, &bg, 0);
     let mut output = vec![0u8; 64];
     let written = buf.write_resolved_chars(&mut output, true);

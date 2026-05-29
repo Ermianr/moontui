@@ -1,15 +1,57 @@
+use crate::color::{self, ColorIntent, RGBA};
+use crate::terminal::Capabilities;
 use std::io::Write;
 
 pub fn write_move_cursor(out: &mut Vec<u8>, x: u32, y: u32) {
   let _ = write!(out, "\x1B[{};{}H", y + 1, x + 1);
 }
 
-pub fn write_fg(out: &mut Vec<u8>, r: u16, g: u16, b: u16) {
-  let _ = write!(out, "\x1B[38;2;{};{};{}m", r >> 8, g >> 8, b >> 8);
+pub fn write_fg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
+  let intent = color::intent(color);
+  match intent {
+    ColorIntent::Default => {
+      out.extend_from_slice(b"\x1B[39m");
+    }
+    ColorIntent::Indexed => {
+      let s = color::slot(color);
+      let _ = write!(out, "\x1B[38;5;{s}m");
+    }
+    ColorIntent::Rgb => {
+      if caps.rgb {
+        let r = color::red(color);
+        let g = color::green(color);
+        let b = color::blue(color);
+        let _ = write!(out, "\x1B[38;2;{r};{g};{b}m");
+      } else {
+        let index = color::nearest_palette_index(color);
+        let _ = write!(out, "\x1B[38;5;{index}m");
+      }
+    }
+  }
 }
 
-pub fn write_bg(out: &mut Vec<u8>, r: u16, g: u16, b: u16) {
-  let _ = write!(out, "\x1B[48;2;{};{};{}m", r >> 8, g >> 8, b >> 8);
+pub fn write_bg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
+  let intent = color::intent(color);
+  match intent {
+    ColorIntent::Default => {
+      out.extend_from_slice(b"\x1B[49m");
+    }
+    ColorIntent::Indexed => {
+      let s = color::slot(color);
+      let _ = write!(out, "\x1B[48;5;{s}m");
+    }
+    ColorIntent::Rgb => {
+      if caps.rgb {
+        let r = color::red(color);
+        let g = color::green(color);
+        let b = color::blue(color);
+        let _ = write!(out, "\x1B[48;2;{r};{g};{b}m");
+      } else {
+        let index = color::nearest_palette_index(color);
+        let _ = write!(out, "\x1B[48;5;{index}m");
+      }
+    }
+  }
 }
 
 pub fn write_style(out: &mut Vec<u8>, attributes: u32) {
@@ -51,6 +93,15 @@ pub fn write_clear_screen(out: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::color::rgb_color;
+
+  fn caps_rgb() -> Capabilities {
+    Capabilities { rgb: true, ansi256: true, ansi16: true }
+  }
+
+  fn caps_ansi256() -> Capabilities {
+    Capabilities { rgb: false, ansi256: true, ansi16: true }
+  }
 
   #[test]
   fn test_write_move_cursor() {
@@ -63,17 +114,67 @@ mod tests {
   }
 
   #[test]
-  fn test_write_fg() {
+  fn test_write_fg_rgb_intent_with_rgb_caps() {
     let mut out = Vec::new();
-    write_fg(&mut out, 65535, 0, 0);
+    let color = rgb_color(255, 0, 0, 255);
+    write_fg(&mut out, color, caps_rgb());
     assert_eq!(out, b"\x1B[38;2;255;0;0m");
   }
 
   #[test]
-  fn test_write_bg() {
+  fn test_write_fg_rgb_intent_without_rgb_caps() {
     let mut out = Vec::new();
-    write_bg(&mut out, 0, 65535, 0);
+    let color = rgb_color(255, 0, 0, 255);
+    write_fg(&mut out, color, caps_ansi256());
+    assert_eq!(out, b"\x1B[38;5;196m");
+  }
+
+  #[test]
+  fn test_write_fg_indexed_intent() {
+    let mut out = Vec::new();
+    let color = color::indexed_color(9, 255, 0, 0);
+    write_fg(&mut out, color, caps_rgb());
+    assert_eq!(out, b"\x1B[38;5;9m");
+  }
+
+  #[test]
+  fn test_write_fg_default_intent() {
+    let mut out = Vec::new();
+    let color = color::default_color(0, 0, 0, 255);
+    write_fg(&mut out, color, caps_rgb());
+    assert_eq!(out, b"\x1B[39m");
+  }
+
+  #[test]
+  fn test_write_bg_rgb_intent_with_rgb_caps() {
+    let mut out = Vec::new();
+    let color = rgb_color(0, 255, 0, 255);
+    write_bg(&mut out, color, caps_rgb());
     assert_eq!(out, b"\x1B[48;2;0;255;0m");
+  }
+
+  #[test]
+  fn test_write_bg_rgb_intent_without_rgb_caps() {
+    let mut out = Vec::new();
+    let color = rgb_color(0, 0, 255, 255);
+    write_bg(&mut out, color, caps_ansi256());
+    assert_eq!(out, b"\x1B[48;5;21m");
+  }
+
+  #[test]
+  fn test_write_bg_indexed_intent() {
+    let mut out = Vec::new();
+    let color = color::indexed_color(9, 255, 0, 0);
+    write_bg(&mut out, color, caps_rgb());
+    assert_eq!(out, b"\x1B[48;5;9m");
+  }
+
+  #[test]
+  fn test_write_bg_default_intent() {
+    let mut out = Vec::new();
+    let color = color::default_color(0, 0, 0, 255);
+    write_bg(&mut out, color, caps_rgb());
+    assert_eq!(out, b"\x1B[49m");
   }
 
   #[test]
@@ -135,8 +236,10 @@ mod tests {
   #[test]
   fn test_multiple_writes_append() {
     let mut out = Vec::new();
-    write_fg(&mut out, 65535, 0, 0);
-    write_bg(&mut out, 0, 0, 65535);
+    let fg = rgb_color(255, 0, 0, 255);
+    let bg = rgb_color(0, 0, 255, 255);
+    write_fg(&mut out, fg, caps_rgb());
+    write_bg(&mut out, bg, caps_rgb());
     write_move_cursor(&mut out, 1, 1);
     assert_eq!(out, b"\x1B[38;2;255;0;0m\x1B[48;2;0;0;255m\x1B[2;2H");
   }

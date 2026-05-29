@@ -3,6 +3,7 @@ use crate::buffer::OptimizedBuffer;
 use crate::diff_renderer::DiffRenderer;
 use crate::event_bridge::EventBridge;
 use crate::frame_stats::FrameStats;
+use crate::terminal::Capabilities;
 use moontui_macros::{moontui_export, moontui_skip};
 use std::io::{self, Write};
 use std::time::Instant;
@@ -37,11 +38,13 @@ pub struct CliRenderer {
   diff_renderer: DiffRenderer,
   raw_mode_enabled: bool,
   alternate_screen: bool,
+  caps: Capabilities,
 }
 
 #[moontui_export]
 impl CliRenderer {
   pub fn new(width: u32, height: u32, output: OutputSink) -> Self {
+    let caps = crate::terminal::detect_capabilities();
     Self {
       front_buffer: OptimizedBuffer::new(width, height),
       back_buffer: OptimizedBuffer::new(width, height),
@@ -51,9 +54,10 @@ impl CliRenderer {
       event_bridge: EventBridge::new(),
       output,
       cursor: CursorState::new(),
-      diff_renderer: DiffRenderer::new(),
+      diff_renderer: DiffRenderer::new(caps),
       raw_mode_enabled: false,
       alternate_screen: false,
+      caps,
     }
   }
 
@@ -210,6 +214,11 @@ impl CliRenderer {
     &self.stats
   }
 
+  #[moontui_skip]
+  pub fn get_capabilities(&self) -> Capabilities {
+    self.caps
+  }
+
   pub fn set_cursor_position(&mut self, x: i32, y: i32, visible: bool) {
     self.cursor.x = x;
     self.cursor.y = y;
@@ -249,6 +258,7 @@ impl CliRenderer {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::color;
 
   #[test]
   fn test_diff_identical_buffers() {
@@ -260,8 +270,8 @@ mod tests {
   #[test]
   fn test_diff_one_changed_cell() {
     let mut renderer = CliRenderer::create_test_renderer(5, 5);
-    let fg = [65535, 65535, 65535, 65535];
-    let bg = [0, 0, 0, 65535];
+    let fg = color::rgb_color(255, 255, 255, 255);
+    let bg = color::rgb_color(0, 0, 0, 255);
     renderer.back_buffer.draw_char('X' as u32, 2, 2, &fg, &bg, 0);
     renderer.render(false).unwrap();
     assert_eq!(renderer.stats.cells_updated, 1);
@@ -270,7 +280,7 @@ mod tests {
   #[test]
   fn test_diff_full_clear() {
     let mut renderer = CliRenderer::create_test_renderer(5, 5);
-    renderer.back_buffer.clear(&[100, 100, 100, 65535]);
+    renderer.back_buffer.clear(&color::rgb_color(100, 100, 100, 255));
     renderer.render(false).unwrap();
     assert_eq!(renderer.stats.cells_updated, 25);
   }

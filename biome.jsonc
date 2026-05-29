@@ -45,6 +45,17 @@
       }
     },
     {
+      "includes": [
+        "packages/core/src/rgba.ts",
+        "packages/core/src/rgba.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": { "noBitwiseOperators": "off" }
+        }
+      }
+    },
+    {
       "includes": ["packages/core/src/renderer.ts"],
       "linter": {
         "rules": {

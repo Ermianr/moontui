@@ -42,7 +42,7 @@ Each dirty rect SHALL have height=1. Adjacent rows with identical dirty spans SH
 
 ### Requirement: Render function SHALL produce ANSI from dirty rects
 
-The `DiffRenderer::render()` method SHALL take a list of `DirtyRect`s, a back buffer, cursor state, and an output buffer reference, and append ANSI escape sequences and characters to the output buffer.
+The `DiffRenderer::render()` method SHALL take a list of `DirtyRect`s, a back buffer, cursor state, terminal capabilities, and an output buffer reference, and append ANSI escape sequences and characters to the output buffer. The capabilities parameter SHALL be used to determine the appropriate ANSI sequences for color emission.
 
 #### Scenario: Render skips continuation cells
 - **WHEN** a cell has the ATTR_CONTINUATION flag set
@@ -65,3 +65,27 @@ The `DiffRenderer::render()` method SHALL take a list of `DirtyRect`s, a back bu
 #### Scenario: Render returns cell count
 - **WHEN** rendering completes
 - **THEN** the method returns the count of non-continuation cells written
+
+#### Scenario: Render uses capabilities for color emission
+- **WHEN** a cell has Rgb intent color and caps.rgb = true
+- **THEN** the renderer SHALL emit `\x1B[38;2;R;G;Bm`
+
+#### Scenario: Render falls back to indexed for non-rgb terminal
+- **WHEN** a cell has Rgb intent color and caps.rgb = false
+- **THEN** the renderer SHALL quantize to nearest palette index and emit `\x1B[38;5;{index}m`
+
+#### Scenario: Render emits indexed color directly
+- **WHEN** a cell has Indexed intent color and caps.ansi256 = true
+- **THEN** the renderer SHALL emit `\x1B[38;5;{slot}m`
+
+#### Scenario: Render emits default color
+- **WHEN** a cell has Default intent color
+- **THEN** the renderer SHALL emit `\x1B[39m` (foreground) or `\x1B[49m` (background)
+
+### Requirement: DiffRenderer SHALL store terminal capabilities
+
+The `DiffRenderer` struct SHALL store a `Capabilities` instance that is set during construction or via a setter method.
+
+#### Scenario: DiffRenderer receives capabilities
+- **WHEN** a DiffRenderer is created with capabilities
+- **THEN** the capabilities SHALL be stored and used for all subsequent render calls

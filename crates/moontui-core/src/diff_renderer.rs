@@ -1,5 +1,6 @@
 use crate::ansi;
 use crate::buffer::{ATTR_CONTINUATION, OptimizedBuffer};
+use crate::terminal::Capabilities;
 
 #[derive(Clone, Debug)]
 pub struct DirtyRect {
@@ -23,11 +24,12 @@ impl AnsiState {
 
 pub struct DiffRenderer {
   ansi_state: AnsiState,
+  caps: Capabilities,
 }
 
 impl DiffRenderer {
-  pub fn new() -> Self {
-    Self { ansi_state: AnsiState::new() }
+  pub fn new(caps: Capabilities) -> Self {
+    Self { ansi_state: AnsiState::new(), caps }
   }
 
   pub fn compute_dirty_rects(
@@ -105,12 +107,12 @@ impl DiffRenderer {
 
           if self.ansi_state.fg != Some(back.fg[idx]) {
             let fg = back.fg[idx];
-            ansi::write_fg(output, fg[0], fg[1], fg[2]);
+            ansi::write_fg(output, fg, self.caps);
             self.ansi_state.fg = Some(back.fg[idx]);
           }
           if self.ansi_state.bg != Some(back.bg[idx]) {
             let bg = back.bg[idx];
-            ansi::write_bg(output, bg[0], bg[1], bg[2]);
+            ansi::write_bg(output, bg, self.caps);
             self.ansi_state.bg = Some(back.bg[idx]);
           }
           let style_attrs = back.attributes[idx] & !ATTR_CONTINUATION;

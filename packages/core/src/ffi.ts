@@ -160,6 +160,7 @@ const lib = backend.loadLibrary(libPath, {
     returns: FFIType.void,
   },
   width: { args: [FFIType.ptr], returns: FFIType.u32 },
+  getCapabilities: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
 });
 
 const textEncoder = new TextEncoder();
@@ -372,6 +373,20 @@ export const api = {
     },
     render(p: Pointer<Renderer>, force: boolean): number {
       return lib.symbols.render(p, ffiBool(force));
+    },
+    getCapabilities(p: Pointer<Renderer>): {
+      rgb: boolean;
+      ansi256: boolean;
+      ansi16: boolean;
+    } {
+      const buf = new Uint8Array(3);
+      const bufPtr = backend.ptr(buf);
+      lib.symbols.getCapabilities(p, bufPtr);
+      return {
+        rgb: buf[0] !== 0,
+        ansi256: buf[1] !== 0,
+        ansi16: buf[2] !== 0,
+      };
     },
   },
   terminal: {

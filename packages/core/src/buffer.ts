@@ -1,6 +1,6 @@
 import { api, type Buffer as FfiBuffer, type Pointer } from "./ffi";
 import { backend } from "./platform/index";
-import { RGBA, type RGBAInput } from "./rgba";
+import { RGBA, type RGBAInput, rgb } from "./rgba";
 
 export const ATTR_CONTINUATION = 1 << 0;
 export const ATTR_BOLD = 1 << 1;
@@ -108,7 +108,7 @@ export class MoonBuffer {
       x,
       y,
       fgColor,
-      bgColor ?? { r: 0, g: 0, b: 0, a: 65_535 },
+      bgColor ?? rgb(0, 0, 0, 255),
       attributes ?? 0
     );
   }
@@ -157,7 +157,7 @@ export class MoonBuffer {
       x,
       y,
       fgColor,
-      bgColor ?? { r: 0, g: 0, b: 0, a: 65_535 },
+      bgColor ?? rgb(0, 0, 0, 255),
       attributes ?? 0
     );
   }
@@ -204,21 +204,24 @@ export class MoonBuffer {
         const ch = charDV.getUint32(idx * 4, true);
         const charStr = ch === 0 ? " " : String.fromCodePoint(ch);
 
+        // Read packed values and create RGBA directly from buffer
         const fgOff = idx * 8;
-        const fg = new RGBA(
-          fgDV.getUint16(fgOff, true),
-          fgDV.getUint16(fgOff + 2, true),
-          fgDV.getUint16(fgOff + 4, true),
-          fgDV.getUint16(fgOff + 6, true)
-        );
+        const fgBuffer = new Uint16Array(4);
+        fgBuffer[0] = fgDV.getUint16(fgOff, true);
+        fgBuffer[1] = fgDV.getUint16(fgOff + 2, true);
+        fgBuffer[2] = fgDV.getUint16(fgOff + 4, true);
+        fgBuffer[3] = fgDV.getUint16(fgOff + 6, true);
+        const fg = new RGBA(0, 0, 0);
+        (fg as { buffer: Uint16Array }).buffer = fgBuffer;
 
         const bgOff = idx * 8;
-        const bg = new RGBA(
-          bgDV.getUint16(bgOff, true),
-          bgDV.getUint16(bgOff + 2, true),
-          bgDV.getUint16(bgOff + 4, true),
-          bgDV.getUint16(bgOff + 6, true)
-        );
+        const bgBuffer = new Uint16Array(4);
+        bgBuffer[0] = bgDV.getUint16(bgOff, true);
+        bgBuffer[1] = bgDV.getUint16(bgOff + 2, true);
+        bgBuffer[2] = bgDV.getUint16(bgOff + 4, true);
+        bgBuffer[3] = bgDV.getUint16(bgOff + 6, true);
+        const bg = new RGBA(0, 0, 0);
+        (bg as { buffer: Uint16Array }).buffer = bgBuffer;
 
         const attr = attrDV.getUint32(idx * 4, true);
         const styleAttrs = attr & ~ATTR_CONTINUATION;
@@ -229,10 +232,12 @@ export class MoonBuffer {
           currentSpan.fg.g === fg.g &&
           currentSpan.fg.b === fg.b &&
           currentSpan.fg.a === fg.a &&
+          currentSpan.fg.intent === fg.intent &&
           currentSpan.bg.r === bg.r &&
           currentSpan.bg.g === bg.g &&
           currentSpan.bg.b === bg.b &&
           currentSpan.bg.a === bg.a &&
+          currentSpan.bg.intent === bg.intent &&
           currentSpan.attributes === styleAttrs
         ) {
           currentSpan.text += charStr;

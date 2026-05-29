@@ -1,7 +1,7 @@
-import { CliRenderer } from "@moontui/core";
+import { CliRenderer, rgb } from "@moontui/core";
 
-const white = { r: 65_535, g: 65_535, b: 65_535, a: 65_535 };
-const black = { r: 0, g: 0, b: 0, a: 65_535 };
+const white = rgb(255, 255, 255, 255);
+const black = rgb(0, 0, 0, 255);
 
 const renderer = new CliRenderer();
 renderer.setupTerminal({ useAlternateScreen: true });
