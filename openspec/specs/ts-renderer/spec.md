@@ -113,6 +113,39 @@ interface RendererEvents {
 - **WHEN** `renderer._emit("key", frameEvent)` is called
 - **THEN** TypeScript SHALL produce a compile-time type error
 
+#### Scenario: Resize event is typed
+- **WHEN** `renderer.on("resize", (e: ResizeEvent) => void)` is called
+- **THEN** the handler SHALL receive `{ type: "resize", width: number, height: number }`
+- **AND** `renderer.on("resize", (e: KeyEvent) => void)` SHALL produce a compile-time type error
+
+### Requirement: CliRenderer SHALL register resize callback in constructor
+
+The `CliRenderer` constructor SHALL call `api.events.createResizeCallback(handler)` to create a native resize callback trampoline and register it via `api.events.setResizeCallback(ptr, callback.ptr)`.
+
+#### Scenario: Constructor registers resize callback
+- **WHEN** `new CliRenderer()` is called
+- **THEN** a resize callback SHALL be registered on the native renderer
+- **AND** the callback SHALL be stored as `_resizeCallback` for cleanup in `destroy()`
+
+#### Scenario: Resize callback updates internal dimensions
+- **WHEN** the native resize callback fires with (120, 40)
+- **THEN** `_width` SHALL be updated to 120
+- **AND** `_height` SHALL be updated to 40
+
+#### Scenario: Resize callback emits via queueMicrotask
+- **WHEN** the native resize callback fires
+- **THEN** the `"resize"` event SHALL be dispatched via `queueMicrotask`
+- **AND** the event object SHALL be `{ type: "resize", width: number, height: number }`
+
+### Requirement: CliRenderer destroy SHALL clean up resize callback
+
+`destroy()` SHALL close the resize callback alongside the key callback to prevent dangling FFI pointers.
+
+#### Scenario: Destroy closes both callbacks
+- **WHEN** `renderer.destroy()` is called
+- **THEN** `api.events.setResizeCallback(ptr, null)` SHALL be called
+- **AND** `resizeCallback.close()` SHALL be called
+
 ## KeyEvent Class
 
 The `KeyEvent` type SHALL be a class (not an interface) with `preventDefault()` and `stopPropagation()` methods.

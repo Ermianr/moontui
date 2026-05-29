@@ -320,3 +320,19 @@ pub extern "C" fn bufferWriteResolvedChars(
     (*buf).write_resolved_chars(output, add_line_breaks)
   }
 }
+
+/// @ffi_manual
+/// @ts_args p: Pointer<Renderer>, width: number, height: number
+/// @ts_returns void
+/// @ts_body lib.symbols.injectResizeEvent(p, width, height)
+#[moontui_export_manual]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn injectResizeEvent(renderer: *mut CliRenderer, width: u32, height: u32) {
+  if renderer.is_null() {
+    return;
+  }
+  unsafe {
+    (*renderer).inject_resize_event(width, height);
+  }
+}

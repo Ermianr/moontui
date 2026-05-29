@@ -6,7 +6,7 @@ Defines the event polling and callback dispatch module for processing user input
 
 ### Requirement: EventBridge SHALL poll crossterm events
 
-`EventBridge::process_events()` SHALL poll crossterm for key events using a zero-timeout poll. For each non-release `KeyEvent`, it SHALL convert via `input::convert_key_event` and invoke the registered callback.
+`EventBridge::process_events()` SHALL poll crossterm for key and resize events using a zero-timeout poll. For each non-release `KeyEvent`, it SHALL convert via `input::convert_key_event` and invoke the registered key callback. For each `Event::Resize`, it SHALL invoke the registered resize callback.
 
 #### Scenario: Registered callback is invoked on key press
 - **WHEN** crossterm reports a `KeyEvent::Char('x')` with no modifiers
@@ -16,9 +16,14 @@ Defines the event polling and callback dispatch module for processing user input
 - **WHEN** crossterm reports a `KeyEventKind::Release`
 - **THEN** no callback is invoked
 
+#### Scenario: Resize events invoke resize callback
+- **WHEN** crossterm reports `Event::Resize(120, 40)` and a resize callback is registered
+- **THEN** the resize callback is invoked with width=120, height=40
+- **AND** the key callback is NOT invoked
+
 ### Requirement: EventBridge SHALL manage callback lifecycle
 
-`EventBridge` SHALL store an `Option<EventCallback>` and provide `set_callback()` to set or clear it.
+`EventBridge` SHALL store an `Option<EventCallback>` for key events and an `Option<ResizeCallback>` for resize events. It SHALL provide `set_callback()` and `set_resize_callback()` to set or clear each independently.
 
 #### Scenario: Setting callback enables event dispatch
 - **WHEN** `set_callback(Some(cb))` is called, then `process_events()` receives a key event
@@ -26,6 +31,14 @@ Defines the event polling and callback dispatch module for processing user input
 
 #### Scenario: Clearing callback disables event dispatch
 - **WHEN** `set_callback(None)` is called, then `process_events()` receives a key event
+- **THEN** no callback is invoked
+
+#### Scenario: Setting resize callback enables resize dispatch
+- **WHEN** `set_resize_callback(Some(cb))` is called, then `process_events()` receives a resize event
+- **THEN** `cb` is invoked with the new dimensions
+
+#### Scenario: Clearing resize callback disables resize dispatch
+- **WHEN** `set_resize_callback(None)` is called, then `process_events()` receives a resize event
 - **THEN** no callback is invoked
 
 ### Requirement: EventBridge SHALL support test injection
