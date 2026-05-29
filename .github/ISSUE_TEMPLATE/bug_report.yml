@@ -1,0 +1,89 @@
+name: Bug Report
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+description: Report a bug to help us improve MoonTUI
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the form below.
+
+        Before submitting, please:
+        - Search [existing issues](https://github.com/Ermianr/moontui/issues) to avoid duplicates
+        - Make sure you are using the latest version of `@moontui/core`
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened. Include error messages or stack traces if available.
+      render: Shell
+    validations:
+      required: true
+
+  - type: input
+    id: moontui-version
+    attributes:
+      label: MoonTUI Version
+      description: Output of `npm ls @moontui/core` or the version from your package.json
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      description: Which JavaScript/TypeScript runtime are you using?
+      options:
+        - Bun
+        - Node.js
+        - Deno
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (screenshots, logs, related issues).

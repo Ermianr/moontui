@@ -1,0 +1,3 @@
+{
+  "extends": "@moontui/config/tsconfig.base"
+}

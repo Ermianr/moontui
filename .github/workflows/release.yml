@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: libmoontui_core.so
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: libmoontui_core.so
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: moontui_core.dll
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build native library
+        run: cargo build -p moontui-core --release
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: target/release/${{ matrix.binary }}
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run Rust tests
+        run: cargo test
+
+      - name: Run TypeScript tests
+        run: bun test --cwd packages/core
+
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: packages/core/native/
+
+      - name: Build all platform packages and dist
+        run: cd packages/core && bun scripts/build.ts --all && bun scripts/build.ts --lib
+
+      - name: Publish packages
+        run: cd packages/core && bun scripts/publish.ts
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

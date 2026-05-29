@@ -1,0 +1,3 @@
+# Auto-generated files
+packages/core/src/ffi.ts linguist-generated=true
+packages/core/src/structs.ts linguist-generated=true

@@ -1,0 +1,8 @@
+style_edition = "2024"
+tab_spaces = 2
+newline_style = "Unix"
+use_small_heuristics = "Max"
+use_field_init_shorthand = true
+reorder_imports = true
+reorder_modules = true
+force_explicit_abi = true

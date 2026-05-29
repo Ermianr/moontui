@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/dependency-review-action@v5
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  build-native:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: libmoontui_core.so
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: libmoontui_core.so
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: moontui_core.dll
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build native library
+        run: cargo build -p moontui-core --release
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: target/release/${{ matrix.binary }}
+
+  test:
+    needs: build-native
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: libmoontui_core.dylib
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: libmoontui_core.so
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: moontui_core.dll
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Download native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: packages/core/native/
+
+      - name: Run Rust tests
+        run: cargo test
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate platform package
+        run: cd packages/core && bun scripts/build.ts --native
+
+      - name: Run TypeScript tests
+        run: cd packages/core && bun test
+
+      - name: Build TypeScript
+        run: cd packages/core && bun scripts/build.ts --lib
+
+  build-complete:
+    needs: [build-native, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All builds and tests passed
+        run: echo "CI complete!"

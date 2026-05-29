@@ -1,0 +1,12 @@
+{
+  "extends": "@moontui/config/tsconfig.base",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

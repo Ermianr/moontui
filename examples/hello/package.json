@@ -1,0 +1,13 @@
+{
+  "name": "@moontui/example-hello",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@moontui/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@moontui/config": "workspace:*",
+    "@types/bun": "latest"
+  }
+}

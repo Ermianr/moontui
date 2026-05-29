@@ -1,0 +1,23 @@
+# Rust
+target/
+
+# Bun / Node
+node_modules/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+packages/core/native/
+packages/core/dist/
+
+# Duplicate lockfile (workspace root Cargo.lock is the source of truth)
+crates/moontui-core/Cargo.lock

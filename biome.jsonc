@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite/biome/core", "ultracite/biome/type-aware"],
+  "files": {
+    "includes": ["!.agents"]
+  },
+  "javascript": {
+    "globals": ["Bun"]
+  },
+  "linter": {
+    "rules": {
+      "correctness": {
+        "useImportExtensions": "off"
+      },
+      "performance": {
+        "noBarrelFile": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnresolvedImports": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/ffi.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnresolvedImports": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/buffer.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnresolvedImports": "off" },
+          "complexity": { "noExcessiveCognitiveComplexity": "off" },
+          "suspicious": { "noBitwiseOperators": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/renderer.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnresolvedImports": "off" }
+        }
+      }
+    }
+  ]
+}

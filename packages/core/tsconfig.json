@@ -1,0 +1,7 @@
+{
+  "extends": "@moontui/config/tsconfig.base",
+  "compilerOptions": {
+    "module": "preserve"
+  },
+  "include": ["src/**/*"]
+}
