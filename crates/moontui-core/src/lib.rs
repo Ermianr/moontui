@@ -4,6 +4,7 @@ use moontui_macros::moontui_export_manual;
 
 mod ansi;
 pub mod buffer;
+mod color;
 mod diff_renderer;
 mod event_bridge;
 mod frame_stats;
@@ -318,6 +319,26 @@ pub extern "C" fn bufferWriteResolvedChars(
   unsafe {
     let output = std::slice::from_raw_parts_mut(output_ptr, output_len);
     (*buf).write_resolved_chars(output, add_line_breaks)
+  }
+}
+
+/// @ffi_manual
+/// @ts_args p: Pointer<Renderer>
+/// @ts_returns { rgb: boolean; ansi256: boolean; ansi16: boolean }
+/// @ts_body const caps = lib.symbols.getCapabilities(p)\nreturn { rgb: caps[0] !== 0, ansi256: caps[1] !== 0, ansi16: caps[2] !== 0 }
+#[moontui_export_manual]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn getCapabilities(
+  renderer: *mut CliRenderer,
+  out_ptr: *mut terminal::Capabilities,
+) {
+  if renderer.is_null() || out_ptr.is_null() {
+    return;
+  }
+  unsafe {
+    let caps = (*renderer).get_capabilities();
+    *out_ptr = caps;
   }
 }
 

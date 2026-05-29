@@ -1,36 +1,95 @@
 import { expect, test } from "bun:test";
-import { RGBA, toRGBA } from "./rgba";
+import {
+  ColorIntent,
+  indexed,
+  RGBA,
+  rgb,
+  terminalDefault,
+  toRGBA,
+} from "./rgba";
 
 test("RGBA constructor sets all channels", () => {
-  const c = new RGBA(255, 128, 0, 65_535);
+  const c = new RGBA(255, 128, 0, 255);
   expect(c.r).toBe(255);
   expect(c.g).toBe(128);
   expect(c.b).toBe(0);
-  expect(c.a).toBe(65_535);
+  expect(c.a).toBe(255);
 });
 
-test("RGBA constructor defaults alpha to 65535", () => {
+test("RGBA constructor defaults alpha to 255", () => {
   const c = new RGBA(10, 20, 30);
-  expect(c.a).toBe(65_535);
+  expect(c.a).toBe(255);
+});
+
+test("RGBA constructor defaults to Rgb intent", () => {
+  const c = new RGBA(255, 0, 0, 255);
+  expect(c.intent).toBe(ColorIntent.Rgb);
+});
+
+test("RGBA constructor with Indexed intent", () => {
+  const c = new RGBA(255, 0, 0, 255, ColorIntent.Indexed, 9);
+  expect(c.intent).toBe(ColorIntent.Indexed);
+  expect(c.slot).toBe(9);
+});
+
+test("RGBA constructor with Default intent", () => {
+  const c = new RGBA(0, 0, 0, 255, ColorIntent.Default);
+  expect(c.intent).toBe(ColorIntent.Default);
 });
 
 test("RGBA buffer is Uint16Array(4)", () => {
   const c = new RGBA(1, 2, 3, 4);
   expect(c.buffer).toBeInstanceOf(Uint16Array);
   expect(c.buffer.length).toBe(4);
-  expect(c.buffer[0]).toBe(1);
-  expect(c.buffer[1]).toBe(2);
-  expect(c.buffer[2]).toBe(3);
-  expect(c.buffer[3]).toBe(4);
 });
 
-test("toRGBA converts plain object", () => {
+test("RGBA packs intent in high bytes", () => {
+  const c = new RGBA(255, 0, 0, 255, ColorIntent.Rgb);
+  // Rgb intent = 0, so high byte should be 0
+  expect(c.buffer[0] >> 8).toBe(0);
+  expect(c.buffer[0] & 0xff).toBe(255);
+});
+
+test("RGBA packs Indexed intent in high bytes", () => {
+  const c = new RGBA(255, 0, 0, 255, ColorIntent.Indexed, 9);
+  // Indexed intent = 1, slot = 9
+  const highByte = c.buffer[0] >> 8;
+  expect(highByte & 0x03).toBe(1); // intent bits
+  expect((highByte >> 2) & 0x3f).toBe(9); // slot bits
+});
+
+test("rgb helper creates Rgb intent RGBA", () => {
+  const c = rgb(255, 128, 0);
+  expect(c.intent).toBe(ColorIntent.Rgb);
+  expect(c.r).toBe(255);
+  expect(c.g).toBe(128);
+  expect(c.b).toBe(0);
+  expect(c.a).toBe(255);
+});
+
+test("indexed helper creates Indexed intent RGBA", () => {
+  const c = indexed(9, 255, 0, 0);
+  expect(c.intent).toBe(ColorIntent.Indexed);
+  expect(c.slot).toBe(9);
+  expect(c.r).toBe(255);
+});
+
+test("terminalDefault helper creates Default intent RGBA", () => {
+  const c = terminalDefault();
+  expect(c.intent).toBe(ColorIntent.Default);
+  expect(c.r).toBe(0);
+  expect(c.g).toBe(0);
+  expect(c.b).toBe(0);
+});
+
+test("toRGBA converts plain object with Rgb intent", () => {
   const c = toRGBA({ r: 10, g: 20, b: 30, a: 40 });
   expect(c).toBeInstanceOf(RGBA);
   expect(c.r).toBe(10);
   expect(c.g).toBe(20);
   expect(c.b).toBe(30);
   expect(c.a).toBe(40);
+  expect(c.intent).toBe(ColorIntent.Rgb);
 });
 
 test("toRGBA returns RGBA instance as-is", () => {
@@ -39,7 +98,18 @@ test("toRGBA returns RGBA instance as-is", () => {
   expect(result).toBe(original);
 });
 
-test("toRGBA defaults alpha to 65535 for plain object", () => {
+test("toRGBA defaults alpha to 255 for plain object", () => {
   const c = toRGBA({ r: 10, g: 20, b: 30 });
-  expect(c.a).toBe(65_535);
+  expect(c.a).toBe(255);
+});
+
+test("toRGBA with intent parameter", () => {
+  const c = toRGBA({ r: 10, g: 20, b: 30 }, ColorIntent.Indexed);
+  expect(c.intent).toBe(ColorIntent.Indexed);
+});
+
+test("ColorIntent enum values", () => {
+  expect(ColorIntent.Rgb).toBe(0);
+  expect(ColorIntent.Indexed).toBe(1);
+  expect(ColorIntent.Default).toBe(2);
 });

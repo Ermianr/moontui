@@ -5,30 +5,26 @@ import {
   api,
   CliRenderer,
   type MoonBuffer,
-  type RGBA,
+  rgb,
 } from "@moontui/core";
 
-function rgba(r: number, g: number, b: number, a = 65_535): RGBA {
-  return { r, g, b, a };
-}
-
 const COLOR = {
-  white: rgba(65_535, 65_535, 65_535),
-  black: rgba(0, 0, 0),
-  red: rgba(65_535, 0, 0),
-  green: rgba(0, 65_535, 0),
-  blue: rgba(0, 0, 65_535),
-  cyan: rgba(0, 65_535, 65_535),
-  yellow: rgba(65_535, 65_535, 0),
-  magenta: rgba(65_535, 0, 65_535),
-  gray: rgba(32_768, 32_768, 32_768),
-  darkGray: rgba(16_384, 16_384, 16_384),
-  darkBlue: rgba(0, 0, 32_768),
-  darkGreen: rgba(0, 32_768, 0),
-  orange: rgba(65_535, 32_768, 0),
-  panelBg: rgba(8192, 8192, 12_288),
-  headerBg: rgba(0, 0, 24_576),
-  statusBg: rgba(0, 24_576, 0),
+  white: rgb(255, 255, 255),
+  black: rgb(0, 0, 0),
+  red: rgb(255, 0, 0),
+  green: rgb(0, 255, 0),
+  blue: rgb(0, 0, 255),
+  cyan: rgb(0, 255, 255),
+  yellow: rgb(255, 255, 0),
+  magenta: rgb(255, 0, 255),
+  gray: rgb(128, 128, 128),
+  darkGray: rgb(64, 64, 64),
+  darkBlue: rgb(0, 0, 128),
+  darkGreen: rgb(0, 128, 0),
+  orange: rgb(255, 128, 0),
+  panelBg: rgb(32, 32, 48),
+  headerBg: rgb(0, 0, 96),
+  statusBg: rgb(0, 96, 0),
 };
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -42,7 +38,7 @@ class Dashboard {
   private timer = 0;
 
   start(): void {
-    const { width, height } = api.getTerminalSize();
+    const { width, height } = api.terminal.getTerminalSize();
     this.renderer = new CliRenderer({ width, height });
     this.renderer.setupTerminal({ useAlternateScreen: true });
     this.running = true;

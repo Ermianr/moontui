@@ -9,12 +9,12 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 ## Requirements
 
 ### Requirement: render performs one render cycle
-`render(ptr, force)` SHALL perform one render cycle and return `i32` (0 = success, 1 = I/O error).
+`render(ptr, force)` SHALL perform one render cycle and return `i32` (0 = success, 1 = I/O error). The render cycle SHALL use detected capabilities for adaptive color emission.
 
 #### Scenario: Successful render
 - **WHEN** `render(ptr, false)` is called and all I/O operations succeed
 - **THEN** the function SHALL return `0`
-- **AND** dirty regions SHALL be computed, ANSI sequences emitted, buffers swapped, and stats recorded
+- **AND** dirty regions SHALL be computed, ANSI sequences emitted (using capabilities), buffers swapped, and stats recorded
 
 #### Scenario: Render with I/O error
 - **WHEN** `render(ptr, false)` is called and `write_all` or `flush` fails
@@ -47,12 +47,13 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 - **AND** the function SHALL return `1`
 
 ### Requirement: setupTerminal returns error code
-`setupTerminal(ptr, use_alternate_screen)` SHALL return `i32` (0 = success, 1 = I/O error).
+`setupTerminal(ptr, use_alternate_screen)` SHALL return `i32` (0 = success, 1 = I/O error). During setup, the renderer SHALL detect terminal capabilities if not already detected.
 
 #### Scenario: Successful setup
 - **WHEN** `setupTerminal` is called and all I/O operations succeed
 - **THEN** the function SHALL return `0`
 - **AND** the terminal SHALL be in raw mode with optional alternate screen
+- **AND** terminal capabilities SHALL be detected and stored
 
 #### Scenario: Setup with I/O error
 - **WHEN** `setupTerminal` is called and `write_all` fails
@@ -72,7 +73,12 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 - **AND** the restore sequence SHALL continue attempting remaining steps
 
 ### Requirement: createRenderer allocates renderer
-`createRenderer(width, height)` allocates a renderer with `output = Box::new(io::stdout())` and two empty buffers, and initializes terminal state to "not yet set up".
+`createRenderer(width, height)` allocates a renderer with `output = Box::new(io::stdout())` and two empty buffers, and initializes terminal state to "not yet set up". The renderer SHALL detect terminal capabilities on creation.
+
+#### Scenario: Renderer detects capabilities
+- **WHEN** `createRenderer(width, height)` is called
+- **THEN** the renderer SHALL detect terminal capabilities
+- **AND** the capabilities SHALL be stored for use during rendering
 
 ### Requirement: createTestRenderer allocates test renderer
 `createTestRenderer(width, height)` allocates a renderer with `output = Box::new(Vec::<u8>::new())` for captured ANSI output. The captured output is readable via `getTestOutput(renderer)`.
@@ -111,6 +117,20 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 - **WHEN** `process_events()` is called with no resize callback and crossterm has a pending resize
 - **THEN** buffers SHALL be reallocated and force-render SHALL execute
 - **AND** no panic SHALL occur
+
+### Requirement: Renderer exposes capabilities
+The `CliRenderer` SHALL provide a `get_capabilities()` method that returns the detected `Capabilities`.
+
+#### Scenario: Get renderer capabilities
+- **WHEN** `renderer.get_capabilities()` is called
+- **THEN** it SHALL return the detected Capabilities struct
+
+### Requirement: Capabilities detectable at FFI level
+The FFI SHALL expose a function to get capabilities from a renderer pointer.
+
+#### Scenario: FFI get capabilities
+- **WHEN** `getCapabilities(ptr)` is called
+- **THEN** it SHALL return a struct with `rgb`, `ansi256`, and `ansi16` boolean fields
 
 ## Data Structures
 

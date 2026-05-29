@@ -20,4 +20,12 @@ export {
   type RenderStats,
   type ResizeEvent,
 } from "./renderer";
-export { RGBA, type RGBAInput, toRGBA } from "./rgba";
+export {
+  ColorIntent,
+  indexed,
+  RGBA,
+  type RGBAInput,
+  rgb,
+  terminalDefault,
+  toRGBA,
+} from "./rgba";
