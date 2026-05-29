@@ -20,7 +20,8 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "build:codegen": "bun ../../scripts/generate-ffi.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "publish": "bun publish"
   },
   "files": [
     "dist/",

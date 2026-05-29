@@ -38,22 +38,27 @@ cargo clippy --workspace --all-targets -- --deny warnings  # Lint Rust
 
 ```bash
 bun install                              # Install dependencies
-bun run build                            # Build native + TS (from repo root)
+bun run build:ts                         # Build TS library only
 bun run build:native                     # Build native binary only
-bun run build:lib                        # Build TS library only
-bun test --cwd packages/core             # Run TS tests
+bun run build:codegen                    # Generate FFI bindings
+bun run test:ts                          # Run TS tests
+bun run fmt:ts                           # Format TS code
+bun run fmt:ts:check                     # Check TS formatting
+bun run lint:ts                          # Lint TS code
 bun run typecheck                        # Typecheck core package (from repo root)
-bun typecheck                            # Typecheck core package (from packages/core)
 ```
 
 ### Combined
 
 ```bash
-bun run check:all                        # fmt check + clippy + ultracite check
-bun run test                             # cargo test + bun test
-bun run typecheck                        # typecheck core package
-bun run check                            # ultracite check (TS formatting/linting)
-bun run fix                              # ultracite fix (auto-fix TS issues)
+bun run build                            # Build all (Rust + TS)
+bun run test                             # Run all tests (Rust + TS)
+bun run fmt                              # Format all (Rust + TS)
+bun run fmt:check                        # Check all formatting
+bun run lint                             # Lint all (Rust + TS)
+bun run check                            # CI gate: fmt:check + lint
+bun run typecheck                        # Typecheck core package
+bun run clean                            # Remove build artifacts
 ```
 
 Always run `bun typecheck` from package directories (e.g., `packages/core`), never `tsc` directly.
@@ -283,7 +288,7 @@ Enforced by Biome via ultracite (`biome.jsonc`):
 - Strict TypeScript
 - Minimal comments, no JSDoc
 
-Run: `bun run check` (check) / `bun run fix` (auto-fix)
+Run: `bun run fmt:ts:check` (check) / `bun run fmt:ts` (auto-fix)
 
 ## Imports
 
@@ -328,11 +333,12 @@ This is a terminal UI library. When running examples or apps built with it, you 
 
 Before committing:
 
-- [ ] Rust: `cargo fmt --all -- --check` passes
-- [ ] Rust: `cargo clippy --workspace --all-targets -- --deny warnings` passes
-- [ ] Rust: `cargo test` passes
-- [ ] TypeScript: `bun run check` passes (ultracite)
-- [ ] TypeScript: `bun test --cwd packages/core` passes
+- [ ] Rust: `bun run fmt:rust:check` passes
+- [ ] Rust: `bun run lint:rust` passes
+- [ ] Rust: `bun run test:rust` passes
+- [ ] TypeScript: `bun run fmt:ts:check` passes
+- [ ] TypeScript: `bun run lint:ts` passes
+- [ ] TypeScript: `bun run test:ts` passes
 - [ ] TypeScript: `bun run typecheck` passes
 - [ ] No auto-generated files were edited
 - [ ] No `unwrap()`/`expect()` added outside tests

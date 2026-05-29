@@ -33,7 +33,7 @@ The GitHub Actions release workflow SHALL use `bun publish` instead of `npm publ
 - **WHEN** the release workflow runs in GitHub Actions
 - **THEN** it SHALL authenticate to the npm registry via `bunfig.toml` `[install.scopes]` or `NPM_CONFIG_TOKEN` environment variable
 - **AND** it SHALL NOT require `npm` to be installed or `~/.npmrc` to be generated
-- **AND** it SHALL invoke `bun run scripts/publish.ts` which internally uses `bun publish`
+- **AND** it SHALL invoke `bun run --cwd packages/core publish` which internally uses `bun publish`
 
 #### Scenario: CI release produces identical results
 - **WHEN** a release is published via `bun publish` in CI

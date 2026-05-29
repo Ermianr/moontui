@@ -7,21 +7,21 @@ Define tooling and configuration standards to enforce code quality across the Mo
 ## Requirements
 
 ### Requirement: Rust code formatting is enforced
-The Rust codebase SHALL conform to the rules defined in `rustfmt.toml`. The command `cargo fmt --all -- --check` MUST pass with zero diffs.
+The Rust codebase SHALL conform to the rules defined in `rustfmt.toml`. The command `bun run fmt:rust:check` (which wraps `cargo fmt --all -- --check`) MUST pass with zero diffs.
 
 #### Scenario: Format check passes on formatted code
-- **WHEN** `cargo fmt --all -- --check` is run on code that already conforms to `rustfmt.toml`
+- **WHEN** `bun run fmt:rust:check` is run on code that already conforms to `rustfmt.toml`
 - **THEN** it exits with status 0 and produces no output
 
 #### Scenario: Format check fails on unformatted code
-- **WHEN** `cargo fmt --all -- --check` is run on code that does not conform to `rustfmt.toml`
+- **WHEN** `bun run fmt:rust:check` is run on code that does not conform to `rustfmt.toml`
 - **THEN** it exits with non-zero status and lists the non-conforming files
 
 ### Requirement: Rust clippy passes with zero warnings
-The Rust codebase MUST pass `cargo clippy --workspace --all-targets -- --deny warnings` with zero errors and zero warnings. The workspace clippy configuration in `Cargo.toml` SHALL be accurately documented in `AGENTS.md`.
+The Rust codebase MUST pass `bun run lint:rust` (which wraps `cargo clippy --workspace --all-targets -- --deny warnings`) with zero errors and zero warnings. The workspace clippy configuration in `Cargo.toml` SHALL be accurately documented in `AGENTS.md`.
 
 #### Scenario: Clippy passes on clean code
-- **WHEN** `cargo clippy --workspace --all-targets -- --deny warnings` is run
+- **WHEN** `bun run lint:rust` is run
 - **THEN** it exits with status 0
 
 #### Scenario: AGENTS.md documents actual clippy configuration
@@ -30,15 +30,15 @@ The Rust codebase MUST pass `cargo clippy --workspace --all-targets -- --deny wa
 - **AND** it SHALL NOT claim `nursery` is configured if it is not present in `[workspace.lints.clippy]`
 
 ### Requirement: TypeScript code passes Ultracite check
-The TypeScript codebase MUST pass `ultracite check` with zero errors.
+The TypeScript codebase MUST pass `bun run fmt:ts:check` (which wraps `ultracite check`) with zero errors.
 
 #### Scenario: Ultracite check passes on clean code
-- **WHEN** `ultracite check` is run
+- **WHEN** `bun run fmt:ts:check` is run
 - **THEN** it exits with status 0
 
 #### Scenario: Ultracite auto-fix resolves fixable issues
-- **WHEN** `ultracite fix` is run
-- **THEN** fixable errors are resolved and `ultracite check` passes
+- **WHEN** `bun run fmt:ts` is run
+- **THEN** fixable errors are resolved and `bun run fmt:ts:check` passes
 
 ### Requirement: VS Code is configured for MoonTUI development
 The `.vscode/settings.json` MUST configure Biome as the default formatter for TypeScript/JavaScript/JSON files and rust-analyzer for Rust files. The rust-analyzer check command MUST be set to "clippy".
