@@ -17,8 +17,7 @@
 
 ## Checklist
 
-- [ ] `cargo test` passes
-- [ ] `bun test --cwd packages/core` passes
-- [ ] `cargo fmt --all` applied
-- [ ] `bun run fix` applied (if TS changes)
-- [ ] `cargo clippy` clean
+- [ ] `bun run fmt` applied
+- [ ] `bun run fmt:check` passes
+- [ ] `bun run lint` passes
+- [ ] `bun run test` passes
