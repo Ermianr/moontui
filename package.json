@@ -33,14 +33,23 @@
     "clean": "rm -rf target/ packages/core/dist/ packages/core/native/",
     "prepare-release": "bun scripts/prepare-release.ts",
     "pre-publish": "bun scripts/pre-publish.ts",
-    "publish": "bun run --cwd packages/core publish"
+    "publish": "bun run --cwd packages/core publish",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
+    "@commitlint/cli": "21.0.2",
+    "@commitlint/config-conventional": "21.0.2",
     "@moontui/config": "workspace:*",
+    "@types/bun": "1.3.14",
+    "husky": "9.1.7",
+    "lint-staged": "17.0.5",
     "typescript": "^6.0.3",
-    "ultracite": "7.8.0",
-    "@types/bun": "1.3.14"
+    "ultracite": "7.8.0"
+  },
+  "lint-staged": {
+    "*.rs": "cargo fmt --all",
+    "*.{ts,tsx}": "ultracite fix"
   },
   "engines": {
     "bun": ">=1.3.0"

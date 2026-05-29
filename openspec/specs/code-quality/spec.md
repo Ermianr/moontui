@@ -84,3 +84,17 @@ The `test_helpers.rs` module SHALL be removed and integration tests SHALL call `
 - **THEN** they SHALL import `moontui_core::renderer::CliRenderer` instead of `moontui_core::test_helpers::*`
 - **AND** they SHALL call `CliRenderer::create_test_renderer()` directly
 - **AND** they SHALL call `renderer.get_output_data()` directly instead of `get_captured_output(&renderer)`
+
+### Requirement: Pre-commit hook is listed in PR checklist
+The PR template checklist SHALL include a check for verifying that the pre-commit hook ran successfully.
+
+#### Scenario: PR template includes pre-commit check
+- **WHEN** a developer creates a new pull request
+- **THEN** the PR template checklist SHALL include a check for pre-commit hook validation
+
+### Requirement: PR checklist uses accurate commands
+The PR template checklist SHALL list the actual project commands for formatting, linting, and testing.
+
+#### Scenario: PR checklist matches project scripts
+- **WHEN** a developer reads the PR template checklist
+- **THEN** the checklist SHALL reference `bun run fmt`, `bun run fmt:check`, `bun run lint`, and `bun run test`
