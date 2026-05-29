@@ -145,7 +145,7 @@ export function createTestRenderer(
     },
     getNativeStats: () => renderer.getStats(),
     resize: (w, h) => {
-      api.renderer.resizeRenderer(renderer._unsafePtr, w, h);
+      api.renderer.injectResizeEvent(renderer._unsafePtr, w, h);
     },
   };
 }

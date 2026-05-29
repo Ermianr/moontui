@@ -77,10 +77,11 @@ export interface RendererEvents {
 
 export class CliRenderer {
   private readonly _ptr: Pointer<Renderer>;
-  private readonly _width: number;
-  private readonly _height: number;
+  private _width: number;
+  private _height: number;
   private readonly _emitter = new TypedEmitter<RendererEvents>();
   private readonly _eventCallback: FFICallbackInstance;
+  private readonly _resizeCallback: FFICallbackInstance;
   private _cursorX = 0;
   private _cursorY = 0;
   private _cursorVisible = false;
@@ -114,6 +115,25 @@ export class CliRenderer {
     api.events.setEventCallback(
       this._ptr,
       this._eventCallback.ptr as unknown as Pointer<Renderer>
+    );
+
+    this._resizeCallback = api.events.createResizeCallback(
+      (event: { width: number; height: number }) => {
+        this._width = event.width;
+        this._height = event.height;
+        queueMicrotask(() => {
+          this._emitter.emit("resize", {
+            type: "resize",
+            width: event.width,
+            height: event.height,
+          });
+        });
+      }
+    );
+
+    api.events.setResizeCallback(
+      this._ptr,
+      this._resizeCallback.ptr as unknown as Pointer<Renderer>
     );
   }
 
@@ -159,6 +179,8 @@ export class CliRenderer {
     this._destroyed = true;
     api.events.setEventCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
     this._eventCallback.close();
+    api.events.setResizeCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
+    this._resizeCallback.close();
     const result = api.renderer.destroyRenderer(this._ptr);
     if (result !== 0) {
       throw new Error(
@@ -229,7 +251,7 @@ export class CliRenderer {
 
   terminalSize(): { width: number; height: number } {
     this.guard();
-    return api.terminal.getTerminalSize();
+    return { width: this._width, height: this._height };
   }
 
   emitKeyEvent(key: string, ctrl: boolean, shift: boolean, alt: boolean): void {

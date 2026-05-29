@@ -9,6 +9,7 @@ use std::time::Instant;
 
 pub use crate::diff_renderer::DirtyRect;
 pub use crate::event_bridge::EventCallback;
+pub use crate::event_bridge::ResizeCallback;
 pub use crate::frame_stats::FrameStats as RenderStats;
 pub use crate::output_sink::OutputSink;
 
@@ -158,7 +159,12 @@ impl CliRenderer {
   }
 
   pub fn process_events(&mut self) -> usize {
-    self.event_bridge.process_events()
+    let count = self.event_bridge.process_events();
+    if let Some((w, h)) = self.event_bridge.take_pending_resize() {
+      self.resize(w, h);
+      let _ = self.render(true);
+    }
+    count
   }
 
   pub fn resize(&mut self, width: u32, height: u32) {
@@ -214,6 +220,10 @@ impl CliRenderer {
     self.event_bridge.set_callback(cb);
   }
 
+  pub fn set_resize_callback(&mut self, cb: Option<ResizeCallback>) {
+    self.event_bridge.set_resize_callback(cb);
+  }
+
   #[moontui_skip]
   pub fn get_output_data(&self) -> &[u8] {
     self.output.data()
@@ -226,6 +236,13 @@ impl CliRenderer {
   #[moontui_skip]
   pub fn inject_key_event(&self, key: &str, ctrl: bool, shift: bool, alt: bool) {
     self.event_bridge.inject_key_event(key, ctrl, shift, alt);
+  }
+
+  #[moontui_skip]
+  pub fn inject_resize_event(&mut self, width: u32, height: u32) {
+    self.event_bridge.inject_resize_event(width, height);
+    self.resize(width, height);
+    let _ = self.render(true);
   }
 }
 

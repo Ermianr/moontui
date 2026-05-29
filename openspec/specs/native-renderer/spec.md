@@ -90,7 +90,27 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 `setCursorPosition(ptr, x, y, visible)` updates the desired cursor position and visibility for the next render.
 
 ### Requirement: resizeRenderer recreates buffers
-`resizeRenderer(ptr, width, height)` recreates both buffers with new dimensions and clears them.
+`resizeRenderer(ptr, width, height)` recreates both buffers with new dimensions and clears them. After resize, the next call to `render` SHALL treat the entire viewport as dirty.
+
+#### Scenario: Successful resize
+- **WHEN** `resizeRenderer(ptr, 120, 40)` is called on an 80x24 renderer
+- **THEN** both front and back buffers SHALL have width=120 and height=40
+- **AND** the next `render(ptr, false)` SHALL update all cells (full dirty)
+
+### Requirement: process_events SHALL handle resize events
+
+`CliRenderer::process_events()` SHALL detect `Event::Resize` from crossterm and: (1) fire the registered resize callback, (2) call `self.resize(w, h)` to reallocate buffers, (3) call `self.render(true)` to force-repaint.
+
+#### Scenario: Resize event triggers full chain
+- **WHEN** `process_events()` is called and crossterm has a pending `Event::Resize(120, 40)`
+- **THEN** the resize callback SHALL fire with (120, 40)
+- **AND** buffers SHALL be reallocated to 120x40
+- **AND** a force-render SHALL execute
+
+#### Scenario: Resize with no callback still reallocates
+- **WHEN** `process_events()` is called with no resize callback and crossterm has a pending resize
+- **THEN** buffers SHALL be reallocated and force-render SHALL execute
+- **AND** no panic SHALL occur
 
 ## Data Structures
 

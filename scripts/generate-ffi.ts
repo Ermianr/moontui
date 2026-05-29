@@ -246,6 +246,12 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
   ffiContent += "    ): void {\n";
   ffiContent += "      lib.symbols.setEventCallback(p, callbackPtr)\n";
   ffiContent += "    },\n";
+  ffiContent += "    setResizeCallback(\n";
+  ffiContent += "      p: Pointer<Renderer>,\n";
+  ffiContent += "      callbackPtr: Pointer<Renderer> | 0\n";
+  ffiContent += "    ): void {\n";
+  ffiContent += "      lib.symbols.setResizeCallback(p, callbackPtr)\n";
+  ffiContent += "    },\n";
   ffiContent += "    createEventCallback(\n";
   ffiContent +=
     "      handler: (event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => void\n";
@@ -270,6 +276,19 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
   ffiContent += "        },\n";
   ffiContent +=
     "        { args: [FFIType.ptr, FFIType.u64, FFIType.ptr, FFIType.u64, FFIType.bool, FFIType.bool, FFIType.bool], returns: FFIType.void }\n";
+  ffiContent += "      )\n";
+  ffiContent += "    },\n";
+  ffiContent += "    createResizeCallback(\n";
+  ffiContent +=
+    "      handler: (event: { width: number; height: number }) => void\n";
+  ffiContent += `    ): import("./platform/types").FFICallbackInstance {\n`;
+  ffiContent += "      return lib.createCallback(\n";
+  ffiContent += "        (width: number, height: number) => {\n";
+  ffiContent +=
+    "          queueMicrotask(() => { handler({ width, height }) })\n";
+  ffiContent += "        },\n";
+  ffiContent +=
+    "        { args: [FFIType.u32, FFIType.u32], returns: FFIType.void }\n";
   ffiContent += "      )\n";
   ffiContent += "    },\n";
   ffiContent += "  },\n";

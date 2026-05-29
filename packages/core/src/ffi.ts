@@ -119,6 +119,10 @@ const lib = backend.loadLibrary(libPath, {
   getNextBuffer: { args: [FFIType.ptr], returns: FFIType.ptr },
   getRenderStats: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
   getTerminalSize: { args: [], returns: FFIType.u64 },
+  injectResizeEvent: {
+    args: [FFIType.ptr, FFIType.u32, FFIType.u32],
+    returns: FFIType.void,
+  },
   render: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.i32 },
   restoreTerminal: { args: [FFIType.ptr], returns: FFIType.i32 },
   setupTerminal: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.i32 },
@@ -151,6 +155,10 @@ const lib = backend.loadLibrary(libPath, {
     returns: FFIType.void,
   },
   setEventCallback: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
+  setResizeCallback: {
+    args: [FFIType.ptr, FFIType.ptr],
+    returns: FFIType.void,
+  },
   width: { args: [FFIType.ptr], returns: FFIType.u32 },
 });
 
@@ -302,6 +310,9 @@ export const api = {
     setEventCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
       lib.symbols.setEventCallback(p, cb);
     },
+    setResizeCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
+      lib.symbols.setResizeCallback(p, cb);
+    },
     width(p: Pointer<Renderer>): number {
       return lib.symbols.width(p);
     },
@@ -352,6 +363,13 @@ export const api = {
         stdoutWriteTimeUs: view.getFloat64(40, true),
       };
     },
+    injectResizeEvent(
+      p: Pointer<Renderer>,
+      width: number,
+      height: number
+    ): void {
+      lib.symbols.injectResizeEvent(p, width, height);
+    },
     render(p: Pointer<Renderer>, force: boolean): number {
       return lib.symbols.render(p, ffiBool(force));
     },
@@ -379,6 +397,12 @@ export const api = {
       callbackPtr: Pointer<Renderer> | 0
     ): void {
       lib.symbols.setEventCallback(p, callbackPtr);
+    },
+    setResizeCallback(
+      p: Pointer<Renderer>,
+      callbackPtr: Pointer<Renderer> | 0
+    ): void {
+      lib.symbols.setResizeCallback(p, callbackPtr);
     },
     createEventCallback(
       handler: (event: {
@@ -428,6 +452,18 @@ export const api = {
           ],
           returns: FFIType.void,
         }
+      );
+    },
+    createResizeCallback(
+      handler: (event: { width: number; height: number }) => void
+    ): import("./platform/types").FFICallbackInstance {
+      return lib.createCallback(
+        (width: number, height: number) => {
+          queueMicrotask(() => {
+            handler({ width, height });
+          });
+        },
+        { args: [FFIType.u32, FFIType.u32], returns: FFIType.void }
       );
     },
   },

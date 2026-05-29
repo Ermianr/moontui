@@ -114,9 +114,20 @@ test("box with text renders correct borders", async () => {
 
 12. The testing module SHALL use the typed `api` object from `ffi.ts` instead of `lib.symbols` for native function calls.
 
-    #### Scenario: resize calls api.resizeRenderer
+    #### Scenario: resize calls api.renderer.injectResizeEvent
     - **WHEN** `setup.resize(w, h)` is called
-    - **THEN** it SHALL call `api.resizeRenderer(renderer._unsafePtr, w, h)` instead of `lib.symbols.resizeRenderer(...)`
+    - **THEN** it SHALL call `api.renderer.injectResizeEvent(renderer._unsafePtr, w, h)` instead of `api.resizeRenderer(renderer._unsafePtr, w, h)`
+
+    #### Scenario: Test resize goes through event chain
+    - **WHEN** `testHarness.resize(80, 24)` is called
+    - **THEN** the resize callback SHALL fire
+    - **AND** buffers SHALL be reallocated to 80x24
+    - **AND** a force-render SHALL execute
+    - **AND** the `"resize"` event SHALL emit to TS subscribers
+
+    #### Scenario: Test resize updates renderer dimensions
+    - **WHEN** `testHarness.resize(80, 24)` is called
+    - **THEN** `renderer.terminalSize()` SHALL return `{ width: 80, height: 24 }`
 
 ## Invariants
 
