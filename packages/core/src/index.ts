@@ -22,6 +22,17 @@ export {
   scrollDirectionFromNative,
 } from "./mouse";
 export {
+  Box,
+  BoxRenderable,
+  type BoxRenderableOptions,
+  Renderable,
+  type RenderableOptions,
+  RootRenderable,
+  Text,
+  TextRenderable,
+  type TextRenderableOptions,
+} from "./renderable";
+export {
   CliRenderer,
   type FrameEvent,
   KeyEvent,

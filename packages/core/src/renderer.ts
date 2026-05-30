@@ -18,6 +18,7 @@ import {
   scrollDirectionFromNative,
 } from "./mouse";
 import type { FFICallbackInstance } from "./platform/types";
+import { RootRenderable } from "./renderable";
 
 export interface RendererOptions {
   autoFocus?: boolean;
@@ -91,6 +92,7 @@ export interface RendererEvents {
 }
 
 export class CliRenderer {
+  readonly root: RootRenderable;
   private readonly _ptr: Pointer<Renderer>;
   private _width: number;
   private _height: number;
@@ -120,6 +122,7 @@ export class CliRenderer {
       this._height,
       options.test ?? false
     );
+    this.root = new RootRenderable(this._width, this._height);
 
     this._eventCallback = api.events.createEventCallback(
       (event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => {
@@ -142,6 +145,8 @@ export class CliRenderer {
       (event: { width: number; height: number }) => {
         this._width = event.width;
         this._height = event.height;
+        this.root.width = event.width;
+        this.root.height = event.height;
         queueMicrotask(() => {
           this._emitter.emit("resize", {
             type: "resize",
@@ -258,6 +263,7 @@ export class CliRenderer {
 
   private doRender(force: boolean): void {
     this.guard();
+    this.root.render(this.getNextBuffer());
     const result = api.renderer.render(this._ptr, force);
     if (result !== 0) {
       throw new Error("render I/O error: stdout pipe closed");

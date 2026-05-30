@@ -380,3 +380,41 @@ The TypeScript API SHALL prevent drawing through a buffer returned by `getCurren
 #### Scenario: Next buffer remains drawable
 - **WHEN** TypeScript code calls `renderer.getNextBuffer()`
 - **THEN** the returned wrapper SHALL expose drawing methods for the next frame
+
+### Requirement: CliRenderer exposes root renderable
+The `CliRenderer` class SHALL expose a public `root` property that owns the renderer's renderable tree.
+
+#### Scenario: Root is available after construction
+- **WHEN** `new CliRenderer({ width: 40, height: 10 })` is called
+- **THEN** `renderer.root` SHALL be defined
+- **AND** `renderer.root.width` SHALL be `40`
+- **AND** `renderer.root.height` SHALL be `10`
+
+### Requirement: CliRenderer renders root before native flush
+The `CliRenderer` render methods SHALL render the root tree into the next buffer before calling the native renderer flush.
+
+#### Scenario: Render draws root tree
+- **WHEN** a text renderable is added to `renderer.root`
+- **AND** `renderer.render()` is called
+- **THEN** the captured frame SHALL include the text renderable output
+
+#### Scenario: Forced render draws root tree
+- **WHEN** a text renderable is added to `renderer.root`
+- **AND** `renderer.renderForce()` is called
+- **THEN** the captured frame SHALL include the text renderable output
+
+### Requirement: Direct buffer rendering remains available
+The `CliRenderer` class SHALL preserve the existing `getNextBuffer()` workflow for users who draw directly into `MoonBuffer`.
+
+#### Scenario: Existing buffer-first render still works
+- **WHEN** user code calls `renderer.getNextBuffer().drawText(...)`
+- **AND** no children are added to `renderer.root`
+- **THEN** `renderer.render()` SHALL preserve the existing direct-buffer output behavior
+
+### Requirement: Root dimensions track terminal size
+The `CliRenderer` class SHALL keep `renderer.root` dimensions synchronized with renderer width and height.
+
+#### Scenario: Resize callback updates root dimensions
+- **WHEN** the renderer receives a resize event with width `120` and height `40`
+- **THEN** `renderer.root.width` SHALL be `120`
+- **AND** `renderer.root.height` SHALL be `40`

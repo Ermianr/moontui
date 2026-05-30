@@ -1,0 +1,88 @@
+# renderable-tree
+
+TypeScript renderable tree primitives for composing UI elements before drawing into a `MoonBuffer`.
+
+## Overview
+
+The renderable tree provides a renderer-owned root and composable renderable nodes. Renderables draw themselves into a `MoonBuffer`, then render their children in deterministic order using parent-relative coordinates.
+
+## Requirements
+
+### Requirement: Renderable tree provides parent-child composition
+The system SHALL provide a TypeScript renderable tree with a base `Renderable` abstraction that supports parent-child composition, deterministic ordering, and rendering into a `MoonBuffer`.
+
+#### Scenario: Child is added to parent
+- **WHEN** `parent.add(child)` is called
+- **THEN** the child SHALL be included in the parent's child list
+- **AND** the child SHALL render when the parent renders
+
+#### Scenario: Children render in insertion order
+- **WHEN** multiple children overlap in the same region
+- **THEN** children added later SHALL render after children added earlier
+- **AND** later children SHALL be able to overwrite earlier output
+
+#### Scenario: Child is removed from parent
+- **WHEN** `parent.remove(child)` is called
+- **THEN** the child SHALL no longer be included in the parent's child list
+- **AND** the child SHALL not render during subsequent parent renders
+
+### Requirement: Root renderable matches renderer dimensions
+The system SHALL provide a `RootRenderable` that represents the renderer-owned UI tree and exposes dimensions matching the current renderer size.
+
+#### Scenario: Renderer creates root
+- **WHEN** a `CliRenderer` is constructed with width and height
+- **THEN** it SHALL expose a `root` renderable
+- **AND** `root.width` and `root.height` SHALL match the renderer dimensions
+
+#### Scenario: Renderer resizes root
+- **WHEN** the renderer processes a resize event
+- **THEN** `root.width` and `root.height` SHALL update to the new renderer dimensions
+
+### Requirement: Renderables use parent-relative coordinates
+The system SHALL render each child at coordinates relative to its parent, accumulating ancestor offsets before drawing into the target `MoonBuffer`.
+
+#### Scenario: Nested text renders with accumulated offsets
+- **WHEN** a box at `(2, 1)` contains text at `(3, 2)`
+- **THEN** the text SHALL draw at absolute buffer coordinate `(5, 3)`
+
+### Requirement: TextRenderable draws styled text
+The system SHALL provide `TextRenderable` for drawing text content with foreground color, optional background color, and optional text attributes.
+
+#### Scenario: Text renderable draws content
+- **WHEN** a `TextRenderable` with content `"Hello"` renders at `(2, 1)`
+- **THEN** the target buffer SHALL contain `"Hello"` starting at `(2, 1)`
+
+#### Scenario: Text renderable uses style options
+- **WHEN** a `TextRenderable` is created with foreground color, background color, and attributes
+- **THEN** rendering SHALL pass those style values to `MoonBuffer.drawText`
+
+### Requirement: BoxRenderable draws rectangular containers
+The system SHALL provide `BoxRenderable` for drawing filled rectangles with optional borders and optional title text.
+
+#### Scenario: Box renderable draws border and fill
+- **WHEN** a `BoxRenderable` renders with width, height, border color, and background color
+- **THEN** it SHALL draw a rectangular region through `MoonBuffer.drawBox`
+
+#### Scenario: Box renderable renders children
+- **WHEN** a `BoxRenderable` contains child renderables
+- **THEN** it SHALL draw its own box first
+- **AND** it SHALL render child renderables after drawing itself
+
+### Requirement: Construct helpers create renderables
+The system SHALL provide `Text(...)` and `Box(...)` helper functions that create corresponding renderable instances.
+
+#### Scenario: Text helper creates TextRenderable
+- **WHEN** `Text({ content: "Hello" })` is called
+- **THEN** it SHALL return a `TextRenderable`
+
+#### Scenario: Box helper accepts children
+- **WHEN** `Box(options, childA, childB)` is called
+- **THEN** it SHALL return a `BoxRenderable`
+- **AND** `childA` and `childB` SHALL be added as children in argument order
+
+### Requirement: Renderable API is exported publicly
+The system SHALL export renderable classes and construct helpers from `@moontui/core`.
+
+#### Scenario: Public import path
+- **WHEN** a consumer imports `Renderable`, `RootRenderable`, `TextRenderable`, `BoxRenderable`, `Text`, or `Box` from `@moontui/core`
+- **THEN** the symbols SHALL resolve from the package public API
