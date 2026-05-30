@@ -129,7 +129,9 @@ async function copyArtifactToNative(): Promise<void> {
       `Unsupported host platform: ${process.platform}-${process.arch}`
     );
   }
-  const dstPath = join(nativeDir, hostPlatform.binaryName);
+  const dstDir = join(nativeDir, hostPlatform.name);
+  mkdirSync(dstDir, { recursive: true });
+  const dstPath = join(dstDir, hostPlatform.binaryName);
 
   if (!existsSync(srcPath)) {
     throw new Error(`Build artifact not found: ${srcPath}`);
@@ -179,9 +181,10 @@ async function generatePlatformPackage(
     `${JSON.stringify(pkgJson, null, 2)}\n`
   );
 
-  const indexJs = `import { join } from "path";
+  const indexJs = `import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export default join(import.meta.dir, "${platform.binaryName}");
+export default join(dirname(fileURLToPath(import.meta.url)), "${platform.binaryName}");
 `;
 
   await Bun.write(join(pkgDir, "index.js"), indexJs);
@@ -203,7 +206,11 @@ async function generateHostPlatformPackage(): Promise<void> {
     );
   }
 
-  const binaryPath = join(nativeDir, hostPlatform.binaryName);
+  const binaryPath = join(
+    nativeDir,
+    hostPlatform.name,
+    hostPlatform.binaryName
+  );
   if (!existsSync(binaryPath)) {
     throw new Error(
       `Native binary not found at ${binaryPath}. Run with --native first.`
@@ -215,12 +222,11 @@ async function generateHostPlatformPackage(): Promise<void> {
 
 async function generateAllPlatformPackages(): Promise<void> {
   for (const platform of PLATFORMS) {
-    const binaryPath = join(nativeDir, `${platform.sourceName}`);
+    const binaryPath = join(nativeDir, platform.name, platform.sourceName);
     if (!existsSync(binaryPath)) {
-      console.warn(
-        `Skipping ${platform.name}: binary not found at ${binaryPath}`
+      throw new Error(
+        `Missing required ${platform.name} artifact at ${binaryPath}`
       );
-      continue;
     }
     await generatePlatformPackage(platform, binaryPath);
   }

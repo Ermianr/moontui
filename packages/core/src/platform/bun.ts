@@ -6,6 +6,7 @@ import {
   JSCallback,
   // biome-ignore lint/correctness/noUnresolvedImports: bun:ffi is a Bun runtime built-in
 } from "bun:ffi";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./shared";
 import type { PlatformBackend, Pointer } from "./types";
@@ -32,6 +33,22 @@ export function createBunBackend(): PlatformBackend {
     ptr(view) {
       // biome-ignore lint/suspicious/noExplicitAny: bun:ffi ptr accepts typed arrays
       return bunPtr(view as any) as unknown as Pointer<void>;
+    },
+    resolveLibraryPath() {
+      const platform = process.platform;
+      const arch = process.arch;
+      const packageName = `@moontui/core-${platform}-${arch}`;
+      try {
+        const resolved = import.meta.resolve(`${packageName}/index.js`);
+        return join(
+          dirname(fileURLToPath(new URL(resolved))),
+          libraryName(platform)
+        );
+      } catch {
+        throw new Error(
+          `moontui native package is unavailable for Bun on ${platform}-${arch}`
+        );
+      }
     },
     toArrayBuffer(ptr, offset, length) {
       // biome-ignore lint/suspicious/noExplicitAny: bun:ffi toArrayBuffer accepts raw pointer number
@@ -75,4 +92,17 @@ export function createBunBackend(): PlatformBackend {
       };
     },
   });
+}
+
+function libraryName(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "win32":
+      return "moontui_core.dll";
+    case "darwin":
+      return "libmoontui_core.dylib";
+    case "linux":
+      return "libmoontui_core.so";
+    default:
+      throw new Error(`Unsupported platform: ${platform}`);
+  }
 }

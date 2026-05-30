@@ -5,6 +5,13 @@ const background = terminalDefault();
 
 const renderer = new CliRenderer();
 renderer.setupTerminal({ useAlternateScreen: true });
+let running = true;
+
+function shutdown() {
+  running = false;
+  renderer.restoreTerminal();
+  renderer.destroy();
+}
 
 function draw() {
   const buffer = renderer.getNextBuffer();
@@ -17,16 +24,23 @@ function draw() {
 draw();
 
 renderer.on("key", () => {
-  renderer.restoreTerminal();
-  renderer.destroy();
+  shutdown();
   process.exit(0);
 });
 
 renderer.on("resize", () => draw());
 
 function loop() {
-  renderer.processEvents();
-  setTimeout(() => loop(), 16);
+  if (!running) {
+    return;
+  }
+  try {
+    renderer.processEvents();
+    setTimeout(() => loop(), 16);
+  } catch (error) {
+    shutdown();
+    throw error;
+  }
 }
 
 loop();

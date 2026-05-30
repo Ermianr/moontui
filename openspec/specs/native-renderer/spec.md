@@ -9,23 +9,58 @@ A `CliRenderer` owns two `OptimizedBuffer` instances (`front` and `back`), termi
 ## Requirements
 
 ### Requirement: render performs one render cycle
-`render(ptr, force)` SHALL perform one render cycle and return `i32` (0 = success, 1 = I/O error). The render cycle SHALL use detected capabilities for adaptive color emission.
+`render(ptr, force)` SHALL perform one render cycle and return `i32` (0 = success, 1 = I/O error). The render cycle SHALL use detected capabilities for adaptive color emission. Renderer frame state SHALL be committed only after output write and flush succeed.
 
 #### Scenario: Successful render
 - **WHEN** `render(ptr, false)` is called and all I/O operations succeed
 - **THEN** the function SHALL return `0`
-- **AND** dirty regions SHALL be computed, ANSI sequences emitted (using capabilities), buffers swapped, and stats recorded
+- **AND** dirty regions SHALL be computed, ANSI sequences emitted using capabilities, buffers swapped, the next buffer cleared, and stats recorded
 
 #### Scenario: Render with I/O error
 - **WHEN** `render(ptr, false)` is called and `write_all` or `flush` fails
 - **THEN** the function SHALL return `1`
-- **AND** the buffers SHALL still be swapped (consistent state)
-- **AND** stats SHALL still be recorded
+- **AND** the buffers SHALL NOT be swapped
+- **AND** the next buffer SHALL NOT be cleared as if the frame succeeded
+- **AND** successful-frame stats SHALL NOT be recorded for the failed output
 
 #### Scenario: Force render
 - **WHEN** `render(ptr, true)` is called
 - **THEN** the entire viewport SHALL be treated as dirty
 - **AND** the same I/O error handling SHALL apply
+
+### Requirement: Resize-triggered renders surface failures
+Renderer APIs that internally force-render after resize SHALL report render failures instead of discarding them.
+
+#### Scenario: Process events resize render fails
+- **WHEN** `process_events()` handles a pending resize and the forced render fails
+- **THEN** the failure SHALL be observable by the caller through the native or TypeScript API
+- **AND** it SHALL NOT be silently ignored
+
+#### Scenario: Injected resize render fails
+- **WHEN** `inject_resize_event()` performs its forced render and output fails
+- **THEN** the failure SHALL be observable by the caller through the native or TypeScript API
+- **AND** renderer state SHALL follow the failed-render invariant
+
+### Requirement: Terminal setup fails when raw mode setup fails
+Terminal setup SHALL report raw-mode initialization failure unless an explicit best-effort setup mode exists.
+
+#### Scenario: Raw mode initialization fails
+- **WHEN** `setupTerminal` cannot enable raw mode
+- **THEN** it SHALL return an error code to the FFI caller
+- **AND** it SHALL NOT report successful setup merely because ANSI writes succeeded
+
+### Requirement: Renderer dimensions are validated before allocation
+Renderer, buffer, and hit-grid allocation paths SHALL validate width and height before multiplying dimensions or allocating backing vectors.
+
+#### Scenario: Dimension multiplication overflows
+- **WHEN** width and height would overflow the allocation size
+- **THEN** construction or resize SHALL fail or clamp according to the documented API
+- **AND** it SHALL NOT panic due to unchecked multiplication
+
+#### Scenario: Rectangle clipping uses checked arithmetic
+- **WHEN** rectangle coordinates plus width or height exceed integer bounds
+- **THEN** clipping SHALL saturate or return an empty rectangle
+- **AND** it SHALL NOT wrap around into an invalid draw or hit region
 
 ### Requirement: destroyRenderer frees all memory
 `destroyRenderer(ptr)` SHALL call `Box::from_raw` to reclaim the heap allocation, call `destroy()` to restore the terminal, and return `i32` (0 = success, 1 = error).

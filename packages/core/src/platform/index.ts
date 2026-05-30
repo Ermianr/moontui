@@ -11,7 +11,6 @@
  *   const lib = backend.loadLibrary(path, definitions);
  */
 
-import { createBunBackend } from "./bun";
 import type {
   FFIFunction,
   LoadedLibrary,
@@ -19,18 +18,20 @@ import type {
   Pointer,
 } from "./types";
 
-let _backend: PlatformBackend | null = null;
-
-function initBackend(): PlatformBackend {
+async function initBackend(): Promise<PlatformBackend> {
   if (typeof process !== "undefined" && process.versions?.bun) {
+    const { createBunBackend } = await import("./bun");
     return createBunBackend();
   }
 
   if (typeof process !== "undefined" && process.versions?.node) {
     try {
-      // biome-ignore lint/suspicious/noExplicitAny: require may not be available in all environments
-      const { createNodeBackend } = (globalThis as any).require("./node");
-      return createNodeBackend();
+      const nodeFfiSpecifier = "node:ffi";
+      const [{ createNodeBackend }, nodeFfi] = await Promise.all([
+        import("./node"),
+        import(nodeFfiSpecifier),
+      ]);
+      return createNodeBackend(nodeFfi);
     } catch {
       // fall through
     }
@@ -39,8 +40,7 @@ function initBackend(): PlatformBackend {
   // biome-ignore lint/suspicious/noExplicitAny: Deno global may not be typed
   if (typeof (globalThis as any).Deno !== "undefined") {
     try {
-      // biome-ignore lint/suspicious/noExplicitAny: require may not be available in all environments
-      const { createDenoBackend } = (globalThis as any).require("./deno");
+      const { createDenoBackend } = await import("./deno");
       return createDenoBackend();
     } catch {
       // fall through
@@ -53,43 +53,41 @@ function initBackend(): PlatformBackend {
   );
 }
 
-function getBackend(): PlatformBackend {
-  if (!_backend) {
-    _backend = initBackend();
-  }
-  return _backend;
-}
+const activeBackend = await initBackend();
 
 export const backend = {
   get isAvailable(): boolean {
-    return getBackend().isAvailable;
+    return activeBackend.isAvailable;
   },
   ptr(view: ArrayBufferView): Pointer<void> {
-    return getBackend().ptr(view);
+    return activeBackend.ptr(view);
   },
   toArrayBuffer(
     ptr: Pointer<void>,
     offset: number,
     length: number
   ): ArrayBuffer {
-    return getBackend().toArrayBuffer(ptr, offset, length);
+    return activeBackend.toArrayBuffer(ptr, offset, length);
   },
   toPointer<T>(value: number | bigint): Pointer<T> {
-    return getBackend().toPointer<T>(value);
+    return activeBackend.toPointer<T>(value);
   },
   loadLibrary(
     path: string,
     definitions: Record<string, FFIFunction>
   ): LoadedLibrary {
-    return getBackend().loadLibrary(path, definitions);
+    return activeBackend.loadLibrary(path, definitions);
+  },
+  resolveLibraryPath(): string {
+    return activeBackend.resolveLibraryPath();
   },
   resolveURL(url: string): string {
-    return getBackend().resolveURL(url);
+    return activeBackend.resolveURL(url);
   },
 };
 
 export function ptr(view: ArrayBufferView): Pointer<void> {
-  return getBackend().ptr(view);
+  return activeBackend.ptr(view);
 }
 
 export function ffiBool(value: boolean): 0 | 1 {
@@ -101,6 +99,8 @@ export {
   type FFIFunction,
   FFIType,
   type LoadedLibrary,
+  type MutablePointer,
   type PlatformBackend,
   type Pointer,
+  type ReadonlyPointer,
 } from "./types";

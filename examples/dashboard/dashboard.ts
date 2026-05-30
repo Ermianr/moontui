@@ -61,6 +61,9 @@ class Dashboard {
   }
 
   private shutdown(): void {
+    if (!this.running) {
+      return;
+    }
     this.running = false;
     this.renderer.restoreTerminal();
     this.renderer.destroy();
@@ -72,20 +75,25 @@ class Dashboard {
       return;
     }
 
-    this.renderer.processEvents();
+    try {
+      this.renderer.processEvents();
 
-    const width = this.renderer.terminalSize().width;
-    const height = this.renderer.terminalSize().height;
+      const width = this.renderer.terminalSize().width;
+      const height = this.renderer.terminalSize().height;
 
-    const buf = this.renderer.getNextBuffer();
-    this.drawFrame(buf, width, height);
-    this.renderer.render();
+      const buf = this.renderer.getNextBuffer();
+      this.drawFrame(buf, width, height);
+      this.renderer.render();
 
-    this.frameCount++;
-    this.spinnerIdx = (this.spinnerIdx + 1) % SPINNER_FRAMES.length;
-    this.timer++;
+      this.frameCount++;
+      this.spinnerIdx = (this.spinnerIdx + 1) % SPINNER_FRAMES.length;
+      this.timer++;
 
-    setTimeout(() => this.loop(), 50);
+      setTimeout(() => this.loop(), 50);
+    } catch (error) {
+      this.shutdown();
+      throw error;
+    }
   }
 
   private drawFrame(buf: MoonBuffer, w: number, h: number): void {

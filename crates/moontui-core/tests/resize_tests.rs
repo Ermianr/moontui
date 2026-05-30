@@ -18,7 +18,7 @@ fn test_resize_callback_fires_with_correct_dimensions() {
   renderer.set_resize_callback(Some(resize_callback_1));
   RESIZE_EVENTS_1.lock().unwrap().clear();
 
-  renderer.inject_resize_event(120, 40);
+  renderer.inject_resize_event(120, 40).unwrap();
 
   let resizes = RESIZE_EVENTS_1.lock().unwrap();
   assert_eq!(resizes.len(), 1);
@@ -28,7 +28,7 @@ fn test_resize_callback_fires_with_correct_dimensions() {
 #[test]
 fn test_buffers_reallocate_after_inject_resize_event() {
   let mut renderer = CliRenderer::create_test_renderer(80, 24);
-  renderer.inject_resize_event(120, 40);
+  renderer.inject_resize_event(120, 40).unwrap();
 
   assert_eq!(renderer.width(), 120);
   assert_eq!(renderer.height(), 40);
@@ -43,7 +43,7 @@ fn test_force_render_after_resize() {
   let mut renderer = CliRenderer::create_test_renderer(80, 24);
   assert_eq!(renderer.get_stats().frame_count, 0);
 
-  renderer.inject_resize_event(120, 40);
+  renderer.inject_resize_event(120, 40).unwrap();
 
   assert_eq!(renderer.get_stats().frame_count, 1);
 }
@@ -53,7 +53,7 @@ fn test_no_panic_when_resize_callback_is_none() {
   let mut renderer = CliRenderer::create_test_renderer(80, 24);
   renderer.set_resize_callback(None);
 
-  renderer.inject_resize_event(120, 40);
+  renderer.inject_resize_event(120, 40).unwrap();
 
   assert_eq!(renderer.width(), 120);
   assert_eq!(renderer.height(), 40);
@@ -65,7 +65,7 @@ fn test_resize_to_smaller_dimensions() {
   renderer.set_resize_callback(Some(resize_callback_2));
   RESIZE_EVENTS_2.lock().unwrap().clear();
 
-  renderer.inject_resize_event(40, 10);
+  renderer.inject_resize_event(40, 10).unwrap();
 
   let resizes = RESIZE_EVENTS_2.lock().unwrap();
   assert_eq!(resizes.len(), 1);
@@ -81,7 +81,7 @@ fn test_resize_to_smaller_dimensions() {
 #[test]
 fn test_resize_produces_nonempty_render_output() {
   let mut renderer = CliRenderer::create_test_renderer(80, 24);
-  renderer.inject_resize_event(40, 10);
+  renderer.inject_resize_event(40, 10).unwrap();
   assert!(!renderer.get_output_data().is_empty(), "resize render should produce output");
 }
 
@@ -89,7 +89,7 @@ fn test_resize_produces_nonempty_render_output() {
 fn test_resize_force_render_uses_terminal_default_background() {
   let mut renderer = CliRenderer::create_test_renderer(80, 24);
 
-  renderer.inject_resize_event(40, 10);
+  renderer.inject_resize_event(40, 10).unwrap();
 
   let output = String::from_utf8_lossy(renderer.get_output_data());
   assert!(output.contains("\x1b[49m"), "resize render should reset to terminal default bg");

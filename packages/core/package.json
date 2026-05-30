@@ -21,7 +21,7 @@
     "build": "bun scripts/build.ts",
     "build:codegen": "bun ../../scripts/generate-ffi.ts",
     "typecheck": "bunx tsc --noEmit",
-    "publish": "bun publish"
+    "publish": "bun scripts/publish.ts"
   },
   "files": [
     "dist/",

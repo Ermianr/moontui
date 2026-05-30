@@ -183,3 +183,30 @@ const lib = dlopen(libPath, {
 - String arguments (`text`, `id`) are UTF-8 encoded and null-terminated where marked as `cstring`.
 - Color arguments are pointers to 4 × `u16` arrays: `[r, g, b, a]` with 0-65535 range.
 - `RenderStats` is an `extern struct` with C-compatible layout. TypeScript allocates it and passes a pointer.
+
+### Requirement: FFI pointer mutability is explicit
+The FFI schema and TypeScript pointer brands SHALL distinguish read-only native pointers from mutable native pointers when exposing renderer-owned buffers.
+
+#### Scenario: Current buffer is read-only
+- **WHEN** TypeScript obtains the renderer current/front buffer
+- **THEN** the pointer SHALL be typed as read-only
+- **AND** mutating buffer drawing APIs SHALL NOT accept that pointer type
+
+#### Scenario: Next buffer is mutable
+- **WHEN** TypeScript obtains the renderer next/back buffer
+- **THEN** the pointer SHALL be typed as mutable
+- **AND** drawing APIs SHALL accept it for mutation
+
+### Requirement: Output structs use pointer-out marshalling
+FFI functions that return structs or multi-field records SHALL write into caller-provided output memory rather than pretending the native symbol returns an indexable JavaScript value.
+
+#### Scenario: Capabilities are read through output memory
+- **WHEN** TypeScript calls the capabilities FFI wrapper
+- **THEN** it SHALL allocate an output buffer for the native `Capabilities` struct
+- **AND** it SHALL pass that pointer to the native function
+- **AND** it SHALL decode `rgb`, `ansi256`, and `ansi16` from the output buffer
+
+#### Scenario: Generated symbol signature matches wrapper call
+- **WHEN** a generated wrapper calls an FFI function
+- **THEN** the number and order of arguments SHALL match the `lib.symbols` definition
+- **AND** codegen SHALL fail or tests SHALL fail if the wrapper omits a required output pointer

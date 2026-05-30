@@ -172,3 +172,29 @@ The `toPointer` method on each backend SHALL include code comments explaining an
 - Pointer normalization is pure: `toPointer` has no side effects.
 - Backends are stateless factories: `loadLibrary` creates a new `LoadedLibrary` instance each time.
 - `FFIType` strings are immutable constants.
+
+### Requirement: Runtime-specific backend modules load only after runtime selection
+The platform facade SHALL NOT statically import backend modules that reference runtime-specific FFI built-ins for other runtimes.
+
+#### Scenario: Node imports platform facade without resolving Bun FFI
+- **WHEN** `packages/core/src/platform/index.ts` is imported in Node.js
+- **THEN** the module SHALL NOT resolve or evaluate any module that imports `bun:ffi`
+- **AND** runtime selection SHALL proceed without a Bun-specific import error
+
+#### Scenario: Deno imports platform facade without Node require
+- **WHEN** `packages/core/src/platform/index.ts` is imported in Deno
+- **THEN** the module SHALL NOT call `require`
+- **AND** backend loading SHALL use a Deno-compatible import path or conditional export
+
+### Requirement: Native library path resolution is runtime-owned
+Native package and binary path resolution SHALL be delegated to the active platform backend or runtime-specific entrypoint instead of reading Node globals from shared generated code.
+
+#### Scenario: Generated FFI code avoids Node globals for platform detection
+- **WHEN** `packages/core/src/ffi.ts` is generated
+- **THEN** it SHALL NOT read `process.platform` or `process.arch` directly
+- **AND** it SHALL ask the platform layer for the current native package identifier or binary path
+
+#### Scenario: Unsupported runtime reports a clear error
+- **WHEN** no backend can resolve a native package for the current runtime
+- **THEN** loading SHALL fail with an error that includes the runtime and platform identifier
+- **AND** the error SHALL NOT be caused by an unresolved runtime-specific import

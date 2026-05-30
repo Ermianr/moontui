@@ -13,6 +13,7 @@ export interface PlatformPrimitives {
     // biome-ignore lint/suspicious/noExplicitAny: native library symbols accept any args
   ) => { symbols: Record<string, (...args: any[]) => any>; close(): void };
   ptr: (view: ArrayBufferView) => Pointer<void>;
+  resolveLibraryPath: () => string;
   resolveURL: (url: string) => string;
   toArrayBuffer: (
     ptr: Pointer<void>,
@@ -27,6 +28,7 @@ export function createBackend(p: PlatformPrimitives): PlatformBackend {
   return {
     isAvailable: true,
     ptr: p.ptr,
+    resolveLibraryPath: p.resolveLibraryPath,
     toArrayBuffer: p.toArrayBuffer,
     toPointer: p.toPointer,
     resolveURL: p.resolveURL,

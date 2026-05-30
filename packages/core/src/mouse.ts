@@ -25,6 +25,20 @@ export interface RawMouseEvent {
   y: number;
 }
 
+const NATIVE_MOUSE_KINDS = new Set<RawMouseEvent["kind"]>([
+  "down",
+  "up",
+  "drag",
+  "move",
+  "scroll",
+]);
+
+export function parseMouseKind(kind: string): RawMouseEvent["kind"] | null {
+  return NATIVE_MOUSE_KINDS.has(kind as RawMouseEvent["kind"])
+    ? (kind as RawMouseEvent["kind"])
+    : null;
+}
+
 export class MouseEvent {
   readonly type = "mouse" as const;
   readonly kind:

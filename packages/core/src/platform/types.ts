@@ -12,6 +12,14 @@ export type Pointer<T = void> = (number | bigint) & {
   readonly [pointerBrand]: T;
 };
 
+export type MutablePointer<T = void> = Pointer<T> & {
+  readonly __mutability: "mutable";
+};
+
+export type ReadonlyPointer<T = void> = Pointer<T> & {
+  readonly __mutability: "readonly";
+};
+
 export type FFITypeString =
   | "i8"
   | "u8"
@@ -75,6 +83,7 @@ export interface PlatformBackend {
     definitions: Record<string, FFIFunction>
   ): LoadedLibrary;
   ptr(view: ArrayBufferView): Pointer<void>;
+  resolveLibraryPath(): string;
   resolveURL(url: string): string;
   toArrayBuffer(
     ptr: Pointer<void>,

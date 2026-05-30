@@ -3,12 +3,16 @@ use std::io::{self, Write};
 pub enum OutputSink {
   Stdout,
   Captured(Vec<u8>),
+  #[cfg(test)]
+  Failing,
 }
 
 impl OutputSink {
   pub fn data(&self) -> &[u8] {
     match self {
       Self::Captured(data) => data,
+      #[cfg(test)]
+      Self::Failing => &[],
       Self::Stdout => &[],
     }
   }
@@ -25,6 +29,8 @@ impl Write for OutputSink {
     match self {
       Self::Stdout => io::stdout().write(buf),
       Self::Captured(data) => data.write(buf),
+      #[cfg(test)]
+      Self::Failing => Err(io::Error::other("test output failure")),
     }
   }
 
@@ -32,6 +38,8 @@ impl Write for OutputSink {
     match self {
       Self::Stdout => io::stdout().flush(),
       Self::Captured(_) => Ok(()),
+      #[cfg(test)]
+      Self::Failing => Err(io::Error::other("test output failure")),
     }
   }
 }

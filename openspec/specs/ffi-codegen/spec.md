@@ -184,3 +184,62 @@ Generated files SHALL have a header comment and `.gitattributes` marking.
 - `defineStruct` is used only on cold paths (stats, callbacks). Hot path (buffer operations) passes raw pointers.
 - Manual functions (`@ffi_manual`) are included in the schema but not auto-generated.
 - The proc-macro does not modify the developer's source code — it only generates side effects (schema file) and injects new items (extern "C" functions).
+
+### Requirement: Schema function keys are unique FFI names
+The generated schema SHALL key exported functions by `ffi_name`, and SHALL retain the Rust method/function name as metadata.
+
+#### Scenario: Duplicate Rust method names across receivers
+- **WHEN** two exported methods have the same Rust name but different receivers and different FFI names
+- **THEN** both functions SHALL appear in `target/moontui-schema.json`
+- **AND** neither SHALL overwrite the other
+
+#### Scenario: Duplicate FFI export name
+- **WHEN** two exported functions resolve to the same `ffi_name`
+- **THEN** schema generation SHALL fail with a diagnostic naming the duplicate export
+
+### Requirement: Schema type mapping is fail-fast
+The Rust schema emitter SHALL map all supported FFI scalar types explicitly and reject unsupported types instead of silently treating them as pointers.
+
+#### Scenario: Supported scalar type is exported
+- **WHEN** an exported function uses `i32`, `u64`, `usize`, `f64`, or `bool`
+- **THEN** the schema SHALL record the explicit scalar type
+- **AND** the generated TypeScript definition SHALL use the corresponding `FFIType`
+
+#### Scenario: Unsupported type is exported
+- **WHEN** an exported function or struct field uses an unsupported type
+- **THEN** schema generation SHALL fail
+- **AND** it SHALL NOT emit `ptr` as a fallback
+
+### Requirement: Codegen writes generated files atomically
+The TypeScript codegen script SHALL write generated files through a temporary file, validate or format that file, and then replace the destination atomically.
+
+#### Scenario: Formatter fails during codegen
+- **WHEN** formatting generated output fails
+- **THEN** `bun run build:codegen` SHALL exit non-zero
+- **AND** the existing generated file SHALL remain unchanged
+
+#### Scenario: Codegen formatting scope
+- **WHEN** `bun run build:codegen` runs
+- **THEN** it SHALL format only generated outputs
+- **AND** it SHALL NOT run unsafe formatting across unrelated repository files
+
+### Requirement: API grouping and callbacks are schema-driven
+The generated TypeScript API grouping and callback factories SHALL be derived from schema metadata rather than hardcoded receiver names or function-name whitelists.
+
+#### Scenario: Unknown API group
+- **WHEN** the schema contains an exported function without a known API group
+- **THEN** codegen SHALL fail with a clear error
+- **AND** it SHALL NOT silently route the function to the renderer API
+
+#### Scenario: New callback descriptor
+- **WHEN** a callback signature is added to the schema
+- **THEN** codegen SHALL generate the callback factory from the descriptor
+- **AND** no hand-written `ffiContent +=` block for that callback SHALL be required
+
+### Requirement: 64-bit numeric return mapping is explicit
+Generated TypeScript wrappers SHALL treat `u64` and `i64` values as `bigint` unless a wrapper explicitly normalizes them to a checked `number`.
+
+#### Scenario: Generated u64 return
+- **WHEN** a generated wrapper returns `u64`
+- **THEN** its TypeScript return type SHALL be `bigint`
+- **OR** the wrapper SHALL perform an explicit safe-range conversion before returning `number`

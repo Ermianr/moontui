@@ -3,6 +3,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const rootDir = join(import.meta.dir, "..");
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 function findPackageJsonFiles(dir: string): string[] {
   const results: string[] = [];
@@ -62,7 +63,12 @@ const allPackageJsonFiles = findPackageJsonFiles(rootDir);
 const resolvedFiles: string[] = [];
 for (const path of allPackageJsonFiles) {
   const pkg = JSON.parse(await Bun.file(path).text());
-  if (pkg.name?.startsWith("@moontui/")) {
+  if (
+    pkg.name?.startsWith("@moontui/") &&
+    pkg.private !== true &&
+    typeof pkg.version === "string" &&
+    SEMVER_RE.test(pkg.version)
+  ) {
     resolvedFiles.push(path);
   }
 }

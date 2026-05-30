@@ -1,9 +1,11 @@
-import { MoonBuffer } from "./buffer";
+import { MoonBuffer, ReadonlyMoonBuffer } from "./buffer";
 import { TypedEmitter } from "./emitter";
 import {
   api,
   type Buffer as FfiBuffer,
+  type MutablePointer,
   type Pointer,
+  type ReadonlyPointer,
   type Renderer,
 } from "./ffi";
 import {
@@ -12,7 +14,7 @@ import {
   type MousePointerStyle,
   mousePointerStyleFromNative,
   mousePointerStyleToNative,
-  type RawMouseEvent,
+  parseMouseKind,
   scrollDirectionFromNative,
 } from "./mouse";
 import type { FFICallbackInstance } from "./platform/types";
@@ -103,6 +105,7 @@ export class CliRenderer {
   private _useMouse: boolean;
   private _enableMouseMovement: boolean;
   private _autoFocus: boolean;
+  private readonly _useAlternateScreen: boolean;
 
   constructor(options: RendererOptions = {}) {
     const size = api.terminal.getTerminalSize();
@@ -111,6 +114,7 @@ export class CliRenderer {
     this._useMouse = options.useMouse ?? true;
     this._enableMouseMovement = options.enableMouseMovement ?? true;
     this._autoFocus = options.autoFocus ?? true;
+    this._useAlternateScreen = options.useAlternateScreen ?? true;
     this._ptr = api.renderer.createRenderer(
       this._width,
       this._height,
@@ -163,10 +167,14 @@ export class CliRenderer {
           scrollDir: number;
         }) => {
           queueMicrotask(() => {
+            const kind = parseMouseKind(raw.kind);
+            if (!kind) {
+              return;
+            }
             this._emitter.emit(
               "mouse",
               new MoonMouseEvent({
-                kind: raw.kind as RawMouseEvent["kind"],
+                kind,
                 button: buttonFromNative(raw.button),
                 x: raw.x,
                 y: raw.y,
@@ -176,7 +184,7 @@ export class CliRenderer {
                   alt: raw.alt,
                 },
                 scroll:
-                  raw.kind === "scroll"
+                  kind === "scroll"
                     ? { direction: scrollDirectionFromNative(raw.scrollDir) }
                     : undefined,
               })
@@ -209,7 +217,7 @@ export class CliRenderer {
     this.guard();
     const result = api.terminal.setupTerminal(
       this._ptr,
-      options.useAlternateScreen ?? true,
+      options.useAlternateScreen ?? this._useAlternateScreen,
       this._useMouse,
       this._enableMouseMovement
     );
@@ -258,14 +266,24 @@ export class CliRenderer {
     this._emitter.emit("frame", { type: "frame", stats });
   }
 
-  private getBuffer(getter: () => Pointer<FfiBuffer>): MoonBuffer {
+  private getReadonlyBuffer(
+    getter: () => ReadonlyPointer<FfiBuffer>
+  ): ReadonlyMoonBuffer {
+    this.guard();
+    const bufPtr = getter();
+    return new ReadonlyMoonBuffer(bufPtr, this._width, this._height);
+  }
+
+  private getBuffer(getter: () => MutablePointer<FfiBuffer>): MoonBuffer {
     this.guard();
     const bufPtr = getter();
     return new MoonBuffer(bufPtr, this._width, this._height);
   }
 
-  getCurrentBuffer(): MoonBuffer {
-    return this.getBuffer(() => api.renderer.getCurrentBuffer(this._ptr));
+  getCurrentBuffer(): ReadonlyMoonBuffer {
+    return this.getReadonlyBuffer(() =>
+      api.renderer.getCurrentBuffer(this._ptr)
+    );
   }
 
   getNextBuffer(): MoonBuffer {
@@ -355,6 +373,31 @@ export class CliRenderer {
     this.guard();
     this._useMouse = true;
     this._enableMouseMovement = enableMovement ?? true;
+    if (!this._mouseCallback) {
+      this._mouseCallback = api.events.createMouseCallback((raw) => {
+        queueMicrotask(() => {
+          const kind = parseMouseKind(raw.kind);
+          if (!kind) {
+            return;
+          }
+          this._emitter.emit(
+            "mouse",
+            new MoonMouseEvent({
+              kind,
+              button: buttonFromNative(raw.button),
+              x: raw.x,
+              y: raw.y,
+              modifiers: { ctrl: raw.ctrl, shift: raw.shift, alt: raw.alt },
+              scroll:
+                kind === "scroll"
+                  ? { direction: scrollDirectionFromNative(raw.scrollDir) }
+                  : undefined,
+            })
+          );
+        });
+      });
+      api.events.setMouseCallback(this._ptr, this._mouseCallback.ptr);
+    }
     api.renderer.enableMouse(this._ptr, this._enableMouseMovement);
   }
 

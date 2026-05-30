@@ -15,10 +15,15 @@ pub struct OptimizedBuffer {
   pub(crate) attributes: Vec<u32>,
 }
 
+fn checked_cell_count(width: u32, height: u32) -> Option<usize> {
+  (width as usize).checked_mul(height as usize)
+}
+
 #[moontui_export(name = "buffer")]
 impl OptimizedBuffer {
   pub fn new(width: u32, height: u32) -> Self {
-    let size = (width as usize) * (height as usize);
+    let (width, height, size) =
+      checked_cell_count(width, height).map_or((0, 0, 0), |size| (width, height, size));
     Self {
       width,
       height,
@@ -30,7 +35,7 @@ impl OptimizedBuffer {
   }
 
   /// @ffi_manual
-  /// @ts_args p: Pointer<Buffer>, bg: RGBAInput
+  /// @ts_args p: MutablePointer<Buffer>, bg: RGBAInput
   /// @ts_returns void
   /// @ts_body lib.symbols.bufferClear(p, rgbaPtr(bg))
   pub fn clear(&mut self, bg: &[u16; 4]) {
@@ -101,8 +106,8 @@ impl OptimizedBuffer {
 
   #[moontui_skip]
   pub fn fill_rect(&mut self, x: u32, y: u32, width: u32, height: u32, bg: &[u16; 4]) {
-    let x_end = (x + width).min(self.width);
-    let y_end = (y + height).min(self.height);
+    let x_end = x.saturating_add(width).min(self.width);
+    let y_end = y.saturating_add(height).min(self.height);
     let stride = self.width as usize;
     for cy in y..y_end {
       for cx in x..x_end {
@@ -122,7 +127,7 @@ impl OptimizedBuffer {
     width: u32,
     height: u32,
     border_chars: &[u32; 8],
-    _packed_options: u32,
+    packed_options: u32,
     border_color: &[u16; 4],
     bg_color: &[u16; 4],
   ) {
@@ -131,20 +136,31 @@ impl OptimizedBuffer {
     }
     let left = x.max(0) as u32;
     let top = y.max(0) as u32;
-    let right = (x + width as i32 - 1).max(0) as u32;
-    let bottom = (y + height as i32 - 1).max(0) as u32;
+    let right = x.saturating_add_unsigned(width.saturating_sub(1)).max(0) as u32;
+    let bottom = y.saturating_add_unsigned(height.saturating_sub(1)).max(0) as u32;
 
     if left >= self.width || top >= self.height {
       return;
     }
 
     if width > 2 && height > 2 {
-      self.fill_rect(left + 1, top + 1, width - 2, height - 2, bg_color);
+      self.fill_rect(
+        left.saturating_add(1),
+        top.saturating_add(1),
+        width - 2,
+        height - 2,
+        bg_color,
+      );
     }
 
     let stride = self.width as usize;
+    let packed_options = if packed_options == 0 { 0b1111 } else { packed_options };
+    let draw_top = packed_options & 1 != 0;
+    let draw_right = packed_options & (1 << 1) != 0;
+    let draw_bottom = packed_options & (1 << 2) != 0;
+    let draw_left = packed_options & (1 << 3) != 0;
 
-    if top < self.height {
+    if draw_top && top < self.height {
       for bx in left..=right {
         if bx >= self.width {
           break;
@@ -161,7 +177,7 @@ impl OptimizedBuffer {
       }
     }
 
-    if bottom < self.height && height > 1 {
+    if draw_bottom && bottom < self.height && height > 1 {
       for bx in left..=right {
         if bx >= self.width {
           break;
@@ -179,15 +195,15 @@ impl OptimizedBuffer {
     }
 
     if height > 1 {
-      for by in (top + 1)..bottom {
+      for by in top.saturating_add(1)..bottom {
         if by >= self.height {
           break;
         }
-        if left < self.width {
+        if draw_left && left < self.width {
           let idx = (by as usize) * stride + (left as usize);
           self.set_cell(idx, border_chars[7], *border_color, *bg_color, 0);
         }
-        if right < self.width && right != left {
+        if draw_right && right < self.width && right != left {
           let idx = (by as usize) * stride + (right as usize);
           self.set_cell(idx, border_chars[3], *border_color, *bg_color, 0);
         }

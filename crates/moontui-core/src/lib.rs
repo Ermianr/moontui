@@ -137,8 +137,8 @@ pub extern "C" fn getCapturedOutput(renderer: *mut CliRenderer, out_len: *mut us
 
 /// @ffi_manual
 /// @ts_args p: Pointer<Renderer>
-/// @ts_returns Pointer<Buffer>
-/// @ts_body return toPointer(lib.symbols.getCurrentBuffer(p))
+/// @ts_returns ReadonlyPointer<Buffer>
+/// @ts_body return toPointer(lib.symbols.getCurrentBuffer(p)) as ReadonlyPointer<Buffer>
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -154,8 +154,8 @@ pub extern "C" fn getCurrentBuffer(renderer: *mut CliRenderer) -> *mut Optimized
 
 /// @ffi_manual
 /// @ts_args p: Pointer<Renderer>
-/// @ts_returns Pointer<Buffer>
-/// @ts_body return toPointer(lib.symbols.getNextBuffer(p))
+/// @ts_returns MutablePointer<Buffer>
+/// @ts_body return toPointer(lib.symbols.getNextBuffer(p)) as MutablePointer<Buffer>
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -199,7 +199,7 @@ pub extern "C" fn getTerminalSize() -> u64 {
 }
 
 /// @ffi_manual
-/// @ts_args buf: Pointer<Buffer>, codepoint: number, x: number, y: number, fg: RGBAInput, bg: RGBAInput, attributes: number
+/// @ts_args buf: MutablePointer<Buffer>, codepoint: number, x: number, y: number, fg: RGBAInput, bg: RGBAInput, attributes: number
 /// @ts_returns void
 /// @ts_body lib.symbols.bufferDrawChar(buf, codepoint, x, y, rgbaPtr(fg), rgbaPtr(bg), attributes)
 #[moontui_export_manual]
@@ -225,7 +225,7 @@ pub extern "C" fn bufferDrawChar(
 }
 
 /// @ffi_manual
-/// @ts_args buf: Pointer<Buffer>, text: string, x: number, y: number, fg: RGBAInput, bg: RGBAInput, attributes: number
+/// @ts_args buf: MutablePointer<Buffer>, text: string, x: number, y: number, fg: RGBAInput, bg: RGBAInput, attributes: number
 /// @ts_returns void
 /// @ts_body const encoded = textEncoder.encode(text)\nlib.symbols.bufferDrawText(buf, backend.ptr(encoded), encoded.length, x, y, rgbaPtr(fg), rgbaPtr(bg), attributes)
 #[moontui_export_manual]
@@ -254,7 +254,7 @@ pub extern "C" fn bufferDrawText(
 }
 
 /// @ffi_manual
-/// @ts_args buf: Pointer<Buffer>, x: number, y: number, width: number, height: number, bg: RGBAInput
+/// @ts_args buf: MutablePointer<Buffer>, x: number, y: number, width: number, height: number, bg: RGBAInput
 /// @ts_returns void
 /// @ts_body lib.symbols.bufferFillRect(buf, x, y, width, height, rgbaPtr(bg))
 #[moontui_export_manual]
@@ -278,7 +278,7 @@ pub extern "C" fn bufferFillRect(
 }
 
 /// @ffi_manual
-/// @ts_args buf: Pointer<Buffer>, x: number, y: number, width: number, height: number, borderChars: Uint32Array, packedOptions: number, borderColor: RGBAInput, bgColor: RGBAInput
+/// @ts_args buf: MutablePointer<Buffer>, x: number, y: number, width: number, height: number, borderChars: Uint32Array, packedOptions: number, borderColor: RGBAInput, bgColor: RGBAInput
 /// @ts_returns void
 /// @ts_body lib.symbols.bufferDrawBox(buf, x, y, width, height, backend.ptr(borderChars), packedOptions, rgbaPtr(borderColor), rgbaPtr(bgColor))
 #[moontui_export_manual]
@@ -331,7 +331,7 @@ pub extern "C" fn bufferWriteResolvedChars(
 /// @ffi_manual
 /// @ts_args p: Pointer<Renderer>
 /// @ts_returns { rgb: boolean; ansi256: boolean; ansi16: boolean }
-/// @ts_body const caps = lib.symbols.getCapabilities(p)\nreturn { rgb: caps[0] !== 0, ansi256: caps[1] !== 0, ansi16: caps[2] !== 0 }
+/// @ts_body const buf = new Uint8Array(3)\nlib.symbols.getCapabilities(p, backend.ptr(buf))\nreturn { rgb: buf[0] !== 0, ansi256: buf[1] !== 0, ansi16: buf[2] !== 0 }
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -350,17 +350,20 @@ pub extern "C" fn getCapabilities(
 
 /// @ffi_manual
 /// @ts_args p: Pointer<Renderer>, width: number, height: number
-/// @ts_returns void
-/// @ts_body lib.symbols.injectResizeEvent(p, width, height)
+/// @ts_returns number
+/// @ts_body return lib.symbols.injectResizeEvent(p, width, height)
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
-pub extern "C" fn injectResizeEvent(renderer: *mut CliRenderer, width: u32, height: u32) {
+pub extern "C" fn injectResizeEvent(renderer: *mut CliRenderer, width: u32, height: u32) -> i32 {
   if renderer.is_null() {
-    return;
+    return 1;
   }
   unsafe {
-    (*renderer).inject_resize_event(width, height);
+    match (*renderer).inject_resize_event(width, height) {
+      Ok(()) => 0,
+      Err(_) => 1,
+    }
   }
 }
 

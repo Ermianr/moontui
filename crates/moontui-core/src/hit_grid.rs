@@ -8,13 +8,9 @@ pub struct HitGrid {
 
 impl HitGrid {
   pub fn new(width: u32, height: u32) -> Self {
-    Self {
-      cells: vec![0; (width * height) as usize],
-      width,
-      height,
-      dirty: false,
-      scissor_stack: Vec::new(),
-    }
+    let (width, height, size) =
+      checked_cell_count(width, height).map_or((0, 0, 0), |size| (width, height, size));
+    Self { cells: vec![0; size], width, height, dirty: false, scissor_stack: Vec::new() }
   }
 
   pub fn add(&mut self, x: u32, y: u32, width: u32, height: u32, id: u32) {
@@ -26,8 +22,8 @@ impl HitGrid {
       if let Some(&(sx, sy, sw, sh)) = self.scissor_stack.last() {
         let ax = x.max(sx);
         let ay = y.max(sy);
-        let bx = (x + width).min(sx + sw);
-        let by = (y + height).min(sy + sh);
+        let bx = x.saturating_add(width).min(sx.saturating_add(sw));
+        let by = y.saturating_add(height).min(sy.saturating_add(sh));
         if ax >= bx || ay >= by {
           return;
         }
@@ -35,8 +31,8 @@ impl HitGrid {
       } else {
         let ax = x;
         let ay = y;
-        let bx = (x + width).min(self.width);
-        let by = (y + height).min(self.height);
+        let bx = x.saturating_add(width).min(self.width);
+        let by = y.saturating_add(height).min(self.height);
         if ax >= bx || ay >= by {
           return;
         }
@@ -65,12 +61,19 @@ impl HitGrid {
   }
 
   pub fn resize(&mut self, new_width: u32, new_height: u32) {
-    let mut new_cells = vec![0u32; (new_width * new_height) as usize];
+    let Some(size) = checked_cell_count(new_width, new_height) else {
+      self.cells.clear();
+      self.width = 0;
+      self.height = 0;
+      self.dirty = true;
+      return;
+    };
+    let mut new_cells = vec![0u32; size];
     let copy_width = self.width.min(new_width);
     let copy_height = self.height.min(new_height);
     for row in 0..copy_height {
-      let src_start = (row * self.width) as usize;
-      let dst_start = (row * new_width) as usize;
+      let src_start = row.saturating_mul(self.width) as usize;
+      let dst_start = row.saturating_mul(new_width) as usize;
       let src_end = src_start + copy_width as usize;
       let dst_end = dst_start + copy_width as usize;
       new_cells[dst_start..dst_end].copy_from_slice(&self.cells[src_start..src_end]);
@@ -85,8 +88,8 @@ impl HitGrid {
     let clipped = if let Some(&(sx, sy, sw, sh)) = self.scissor_stack.last() {
       let ax = x.max(sx);
       let ay = y.max(sy);
-      let bx = (x + w).min(sx + sw);
-      let by = (y + h).min(sy + sh);
+      let bx = x.saturating_add(w).min(sx.saturating_add(sw));
+      let by = y.saturating_add(h).min(sy.saturating_add(sh));
       (ax, ay, bx.saturating_sub(ax), by.saturating_sub(ay))
     } else {
       (x, y, w, h)
@@ -119,6 +122,10 @@ impl HitGrid {
   pub(crate) fn height(&self) -> u32 {
     self.height
   }
+}
+
+fn checked_cell_count(width: u32, height: u32) -> Option<usize> {
+  (width as usize).checked_mul(height as usize)
 }
 
 #[cfg(test)]
