@@ -43,19 +43,35 @@ pub fn write_bg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
 }
 
 pub fn write_style(out: &mut Vec<u8>, attributes: u32) {
-  out.push(b'\x1B');
-  out.push(b'[');
-  out.push(b'0');
+  let mut wrote = false;
+
   if (attributes & crate::buffer::ATTR_BOLD) != 0 {
-    out.extend_from_slice(b";1");
+    write_style_param(out, &mut wrote, b"1");
   }
   if (attributes & crate::buffer::ATTR_ITALIC) != 0 {
-    out.extend_from_slice(b";3");
+    write_style_param(out, &mut wrote, b"3");
   }
   if (attributes & crate::buffer::ATTR_UNDERLINE) != 0 {
-    out.extend_from_slice(b";4");
+    write_style_param(out, &mut wrote, b"4");
   }
-  out.push(b'm');
+
+  if wrote {
+    out.push(b'm');
+  }
+}
+
+fn write_style_param(out: &mut Vec<u8>, wrote: &mut bool, param: &[u8]) {
+  if *wrote {
+    out.push(b';');
+  } else {
+    out.extend_from_slice(b"\x1B[");
+    *wrote = true;
+  }
+  out.extend_from_slice(param);
+}
+
+pub fn write_reset(out: &mut Vec<u8>) {
+  out.extend_from_slice(b"\x1B[0m");
 }
 
 pub fn write_hide_cursor(out: &mut Vec<u8>) {
@@ -200,20 +216,27 @@ mod tests {
   fn test_write_style_bold() {
     let mut out = Vec::new();
     write_style(&mut out, crate::buffer::ATTR_BOLD);
-    assert_eq!(out, b"\x1B[0;1m");
+    assert_eq!(out, b"\x1B[1m");
   }
 
   #[test]
   fn test_write_style_italic_underline() {
     let mut out = Vec::new();
     write_style(&mut out, crate::buffer::ATTR_ITALIC | crate::buffer::ATTR_UNDERLINE);
-    assert_eq!(out, b"\x1B[0;3;4m");
+    assert_eq!(out, b"\x1B[3;4m");
   }
 
   #[test]
   fn test_write_style_no_attributes() {
     let mut out = Vec::new();
     write_style(&mut out, 0);
+    assert!(out.is_empty());
+  }
+
+  #[test]
+  fn test_write_reset() {
+    let mut out = Vec::new();
+    write_reset(&mut out);
     assert_eq!(out, b"\x1B[0m");
   }
 

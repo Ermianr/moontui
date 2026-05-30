@@ -6,6 +6,7 @@ import {
   CliRenderer,
   type MoonBuffer,
   rgb,
+  terminalDefault,
 } from "@moontui/core";
 
 const COLOR = {
@@ -22,6 +23,7 @@ const COLOR = {
   darkBlue: rgb(0, 0, 128),
   darkGreen: rgb(0, 128, 0),
   orange: rgb(255, 128, 0),
+  surfaceBg: terminalDefault(),
   panelBg: rgb(32, 32, 48),
   headerBg: rgb(0, 0, 96),
   statusBg: rgb(0, 96, 0),
@@ -70,10 +72,10 @@ class Dashboard {
       return;
     }
 
+    this.renderer.processEvents();
+
     const width = this.renderer.terminalSize().width;
     const height = this.renderer.terminalSize().height;
-
-    this.renderer.processEvents();
 
     const buf = this.renderer.getNextBuffer();
     this.drawFrame(buf, width, height);
@@ -87,7 +89,7 @@ class Dashboard {
   }
 
   private drawFrame(buf: MoonBuffer, w: number, h: number): void {
-    buf.clear(COLOR.black);
+    buf.clear(COLOR.surfaceBg);
 
     // --- Header bar ---
     const headerBg = this.toggleState ? COLOR.darkGreen : COLOR.headerBg;
@@ -247,7 +249,7 @@ class Dashboard {
     const progY = bottomPanelY + 6;
     const progW = w - 4;
     if (progY < h - 2 && progW > 4) {
-      buf.drawText(" Progress:", 2, progY, COLOR.gray, COLOR.black);
+      buf.drawText(" Progress:", 2, progY, COLOR.gray, COLOR.surfaceBg);
       const barW = progW - 12;
       if (barW > 0) {
         const progress = (this.timer % 100) / 100;
@@ -255,8 +257,8 @@ class Dashboard {
         const empty = barW - filled;
         const barStr = `[${"█".repeat(filled)}${"░".repeat(empty)}]`;
         const pct = `${(progress * 100).toFixed(0)}%`;
-        buf.drawText(barStr, 12, progY, COLOR.cyan, COLOR.black);
-        buf.drawText(pct, 12 + barW + 1, progY, COLOR.yellow, COLOR.black);
+        buf.drawText(barStr, 12, progY, COLOR.cyan, COLOR.surfaceBg);
+        buf.drawText(pct, 12 + barW + 1, progY, COLOR.yellow, COLOR.surfaceBg);
       }
     }
 

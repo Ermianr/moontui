@@ -23,8 +23,8 @@ impl OptimizedBuffer {
       width,
       height,
       chars: vec![0u32; size],
-      fg: vec![color::rgb_color(0, 0, 0, 255); size],
-      bg: vec![color::rgb_color(0, 0, 0, 255); size],
+      fg: vec![color::default_color(0, 0, 0, 255); size],
+      bg: vec![color::default_color(0, 0, 0, 255); size],
       attributes: vec![0u32; size],
     }
   }
@@ -35,7 +35,7 @@ impl OptimizedBuffer {
   /// @ts_body lib.symbols.bufferClear(p, rgbaPtr(bg))
   pub fn clear(&mut self, bg: &[u16; 4]) {
     self.chars.fill(0);
-    self.fg.fill(color::rgb_color(0, 0, 0, 255));
+    self.fg.fill(color::default_color(0, 0, 0, 255));
     self.bg.fill(*bg);
     self.attributes.fill(0);
   }
@@ -317,8 +317,11 @@ mod tests {
     assert_eq!(buf.width, 10);
     assert_eq!(buf.height, 5);
     assert_eq!(buf.chars.len(), 50);
+    let default = color::default_color(0, 0, 0, 255);
     for i in 0..50 {
       assert_eq!(buf.chars[i], 0);
+      assert_eq!(buf.fg[i], default);
+      assert_eq!(buf.bg[i], default);
       assert_eq!(buf.attributes[i], 0);
     }
   }
@@ -328,8 +331,10 @@ mod tests {
     let mut buf = OptimizedBuffer::new(5, 5);
     let bg = color::rgb_color(100, 100, 100, 255);
     buf.clear(&bg);
+    let default_fg = color::default_color(0, 0, 0, 255);
     for i in 0..25 {
       assert_eq!(buf.chars[i], 0);
+      assert_eq!(buf.fg[i], default_fg);
       assert_eq!(buf.bg[i], bg);
       assert_eq!(buf.attributes[i], 0);
     }
