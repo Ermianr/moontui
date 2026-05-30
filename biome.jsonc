@@ -2,7 +2,11 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core", "ultracite/biome/type-aware"],
   "files": {
-    "includes": ["!.agents"]
+    "includes": [
+      "!.agents",
+      "!packages/core/src/ffi.ts",
+      "!packages/core/src/structs.ts"
+    ]
   },
   "javascript": {
     "globals": ["Bun"]
