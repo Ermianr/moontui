@@ -216,9 +216,9 @@ const lib = backend.loadLibrary(libPath, {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-function decodeStringPointer(ptr: number, len: bigint): string {
+function decodeStringPointer(ptr: number, len: number): string {
   return textDecoder.decode(
-    backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, Number(len))
+    backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, len)
   );
 }
 

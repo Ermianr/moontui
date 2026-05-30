@@ -281,8 +281,8 @@ const lib = backend.loadLibrary(libPath, {
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
-function decodeStringPointer(ptr: number, len: bigint): string {
-  return textDecoder.decode(backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, Number(len)))
+function decodeStringPointer(ptr: number, len: number): string {
+  return textDecoder.decode(backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, len))
 }
 
 function rgbaPtr(color: RGBAInput): Pointer<void> {
