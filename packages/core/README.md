@@ -11,29 +11,70 @@ npm install @moontui/core
 ## Usage
 
 ```typescript
-import { Terminal } from "@moontui/core"
+import { CliRenderer, rgb } from "@moontui/core"
 
-const terminal = new Terminal()
-terminal.init()
+const white = rgb(255, 255, 255, 255)
+const black = rgb(0, 0, 0, 255)
 
-terminal.draw(0, 0, "Hello, MoonTUI!")
-terminal.flush()
+const renderer = new CliRenderer()
+renderer.setupTerminal({ useAlternateScreen: true })
 
-await terminal.waitForInput()
-terminal.restore()
+const buffer = renderer.getNextBuffer()
+buffer.clear(black)
+buffer.drawText("Hello from MoonTUI!", 2, 2, white)
+buffer.drawText("Press any key to exit...", 2, 4, white)
+
+renderer.render()
+
+renderer.on("key", () => {
+  renderer.restoreTerminal()
+  renderer.destroy()
+  process.exit(0)
+})
+
+function loop() {
+  renderer.processEvents()
+  setTimeout(() => loop(), 16)
+}
+
+loop()
 ```
 
 ## API
 
-### `Terminal`
+### `CliRenderer`
 
 The main entry point for terminal operations.
 
-- `terminal.init()` -- initialize the terminal (enables raw mode, alternate screen)
-- `terminal.restore()` -- restore terminal to its original state
-- `terminal.draw(x, y, text)` -- draw text at the given position
-- `terminal.flush()` -- flush the buffer to the terminal
-- `terminal.waitForInput()` -- wait for user input (keyboard or mouse)
+- `new CliRenderer(options?)` -- create a renderer instance
+- `renderer.setupTerminal(options?)` -- initialize the terminal (enables raw mode, alternate screen)
+- `renderer.restoreTerminal()` -- restore terminal to its original state
+- `renderer.render()` -- render the current buffer to the terminal
+- `renderer.processEvents()` -- poll for input events (keyboard, mouse, resize)
+- `renderer.on(event, handler)` -- listen for events (`key`, `mouse`, `resize`, `frame`)
+- `renderer.destroy()` -- clean up native resources
+- `renderer.getNextBuffer()` -- get the back buffer for drawing
+- `renderer.getCurrentBuffer()` -- get the front buffer (last rendered)
+- `renderer.setCursorPosition(x, y, visible)` -- set cursor position and visibility
+- `renderer.enableMouse(enableMovement?)` -- enable mouse input
+- `renderer.disableMouse()` -- disable mouse input
+- `renderer.setMousePointerStyle(style)` -- set cursor style (`default`, `pointer`, `text`, `crosshair`, `move`, `not-allowed`)
+
+### `MoonBuffer`
+
+Buffer for drawing operations.
+
+- `buffer.clear(bgColor)` -- fill the buffer with a background color
+- `buffer.drawText(text, x, y, fgColor, bgColor?, attributes?)` -- draw text at coordinates
+- `buffer.drawChar(charCodepoint, x, y, fgColor, bgColor?, attributes?)` -- draw a single character
+- `buffer.drawRect(x, y, width, height, fgColor, bgColor?, attributes?)` -- draw a rectangle
+- `buffer.drawBox(options)` -- draw a box with optional borders and title
+
+### `RGBA` / Color Helpers
+
+- `rgb(r, g, b, a?)` -- create an RGB color
+- `indexed(slot, r, g, b, a?)` -- create an indexed palette color
+- `terminalDefault(r?, g?, b?, a?)` -- create a terminal default color
 
 ## Platform Support
 

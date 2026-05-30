@@ -70,6 +70,8 @@ A `scripts/generate-ffi.ts` script SHALL read `target/moontui-schema.json` and g
 - `packages/core/src/ffi.ts` — `dlopen` symbol definitions and typed `api` object
 - `packages/core/src/structs.ts` — `defineStruct` declarations for each struct
 
+The callback factory section SHALL use declarative `CallbackDescriptor` data structures and a shared `emitCallbackFactory()` function, rather than hardcoded string concatenation. A `decodeStringPointer(ptr, len)` helper and a module-scoped `textDecoder` SHALL be emitted in the generated file.
+
 #### Scenario: Codegen generates ffi.ts
 - **WHEN** `bun run build:codegen` is executed and schema.json contains function definitions
 - **THEN** `packages/core/src/ffi.ts` SHALL be regenerated with all functions from the schema
@@ -77,10 +79,32 @@ A `scripts/generate-ffi.ts` script SHALL read `target/moontui-schema.json` and g
 - **AND** the codegen script SHALL NOT contain hardcoded `manualLibDefs` or `needsSpecialHandling` lists
 - **AND** all manual function definitions SHALL be read from the schema's `ts_body`, `ts_args`, and `ts_returns` fields
 
+#### Scenario: Generated ffi.ts contains decodeStringPointer helper
+- **WHEN** `packages/core/src/ffi.ts` is generated
+- **THEN** it SHALL contain a `decodeStringPointer(ptr: number, len: bigint): string` function
+- **AND** it SHALL contain a module-scoped `const textDecoder = new TextDecoder()`
+
+#### Scenario: Callback factories use decodeStringPointer
+- **WHEN** `createEventCallback` or `createMouseCallback` is generated in `ffi.ts`
+- **THEN** they SHALL call `decodeStringPointer(typePtr, typeLen)` instead of inlining `new TextDecoder().decode(backend.toArrayBuffer(...))`
+
+#### Scenario: Callback setter signatures accept Pointer<void>
+- **WHEN** `setEventCallback`, `setResizeCallback`, `setMouseCallback` are generated in `ffi.ts`
+- **THEN** their second parameter type SHALL be `Pointer<void> | 0` (not `Pointer<Renderer> | 0`)
+
+#### Scenario: injectMouseEvent reuses module-scoped textEncoder
+- **WHEN** `injectMouseEvent` is generated in `ffi.ts`
+- **THEN** it SHALL use the module-scoped `textEncoder` constant instead of creating `new TextEncoder()` inline
+
 #### Scenario: Codegen reads manual function metadata from schema
 - **WHEN** the schema contains a function with `"manual": true` and `"ts_body"` field
 - **THEN** the codegen script SHALL use the `ts_body` to generate the TypeScript function implementation
 - **AND** it SHALL NOT maintain its own parallel knowledge of the function's arguments or body
+
+#### Scenario: Codegen uses declarative callback descriptors
+- **WHEN** `scripts/generate-ffi.ts` is inspected
+- **THEN** the callback factory section SHALL be generated from `CallbackDescriptor` data structures
+- **AND** it SHALL NOT contain hardcoded `ffiContent +=` string concatenation for individual callback lines
 
 #### Scenario: Codegen has no hardcoded function name lists
 - **WHEN** `scripts/generate-ffi.ts` is inspected

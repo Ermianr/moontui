@@ -60,6 +60,17 @@ export class RGBA {
   get slot(): number {
     return unpackSlot(this.buffer[0]);
   }
+
+  static fromPackedBuffer(buffer: Uint16Array): RGBA {
+    if (buffer.length !== 4) {
+      throw new Error(
+        `RGBA.fromPackedBuffer: expected length 4, got ${buffer.length}`
+      );
+    }
+    const rgba = Object.create(RGBA.prototype) as RGBA;
+    (rgba as { buffer: Uint16Array }).buffer = buffer;
+    return rgba;
+  }
 }
 
 export function rgb(r: number, g: number, b: number, a = 255): RGBA {

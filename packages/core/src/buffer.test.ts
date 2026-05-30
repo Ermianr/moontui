@@ -6,48 +6,58 @@ const white = { r: 65_535, g: 65_535, b: 65_535, a: 65_535 };
 const black = { r: 0, g: 0, b: 0, a: 65_535 };
 const red = { r: 65_535, g: 0, b: 0, a: 65_535 };
 
-function createBuffer(width: number, height: number): MoonBuffer {
+function createBuffer(
+  width: number,
+  height: number
+): {
+  buf: MoonBuffer;
+  rendererPtr: ReturnType<typeof api.renderer.createRenderer>;
+} {
   const rendererPtr = api.renderer.createRenderer(width, height, false);
   const bufPtr = api.renderer.getNextBuffer(rendererPtr);
-  return new MoonBuffer(bufPtr, width, height);
+  return { buf: new MoonBuffer(bufPtr, width, height), rendererPtr };
 }
 
 test("buffer clear fills with background color", () => {
-  const buf = createBuffer(5, 3);
+  const { buf, rendererPtr } = createBuffer(5, 3);
   buf.clear(red);
   const bytes = buf.getRealCharBytes(false);
   const text = new TextDecoder().decode(bytes);
   expect(text).toBe("     ".repeat(3));
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer drawText places text at coordinates", () => {
-  const buf = createBuffer(10, 5);
+  const { buf, rendererPtr } = createBuffer(10, 5);
   buf.clear(black);
   buf.drawText("Moon", 2, 2, white);
   const bytes = buf.getRealCharBytes(true);
   const lines = new TextDecoder().decode(bytes).split("\n");
   expect(lines[2]).toContain("Moon");
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer drawChar places single character", () => {
-  const buf = createBuffer(5, 5);
+  const { buf, rendererPtr } = createBuffer(5, 5);
   buf.clear(black);
   buf.drawChar("X".codePointAt(0) ?? 0, 1, 1, white);
   const bytes = buf.getRealCharBytes(false);
   const text = new TextDecoder().decode(bytes);
   expect(text).toContain("X");
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer fillRect fills region", () => {
-  const buf = createBuffer(10, 5);
+  const { buf, rendererPtr } = createBuffer(10, 5);
   buf.clear(black);
   buf.fillRect(2, 1, 4, 2, red);
   const spans = buf.getSpanLines();
   expect(spans.length).toBe(5);
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer drawBox renders borders", () => {
-  const buf = createBuffer(20, 10);
+  const { buf, rendererPtr } = createBuffer(20, 10);
   buf.clear(black);
   buf.drawBox({
     x: 2,
@@ -60,14 +70,16 @@ test("buffer drawBox renders borders", () => {
   });
   const spans = buf.getSpanLines();
   expect(spans.length).toBe(10);
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer getSpanLines groups identical styles", () => {
-  const buf = createBuffer(10, 3);
+  const { buf, rendererPtr } = createBuffer(10, 3);
   buf.clear(black);
   buf.drawText("Hello", 0, 0, white);
   const spans = buf.getSpanLines();
   expect(spans[0].spans.length).toBeGreaterThanOrEqual(1);
+  api.renderer.destroyRenderer(rendererPtr);
 });
 
 test("buffer getSpanLines after resize reads fresh pointers", () => {

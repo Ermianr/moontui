@@ -75,6 +75,94 @@ function resolveTsType(type: string, context: string): string {
   return mapped;
 }
 
+interface CallbackDescriptor {
+  ffiArgs: string[];
+  handlerBody: string;
+  handlerParams: string;
+  typeGuard: string;
+  typeScriptHandlerType: string;
+}
+
+function emitCallbackFactory(desc: CallbackDescriptor, indent: string): string {
+  let content = "";
+  content += `${indent}  handler: ${desc.typeScriptHandlerType}\n`;
+  content += `${indent}): import("./platform/types").FFICallbackInstance {\n`;
+  content += `${indent}  return lib.createCallback(\n`;
+  content += `${indent}    (${desc.handlerParams}) => {\n`;
+  for (const line of desc.handlerBody.split("\n")) {
+    content += `${indent}      ${line}\n`;
+  }
+  content += `${indent}    },\n`;
+  content += `${indent}    { args: [${desc.ffiArgs.join(", ")}], returns: FFIType.void }\n`;
+  content += `${indent}  )\n`;
+  content += `${indent}},\n`;
+  return content;
+}
+
+const EVENT_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
+  ffiArgs: [
+    "FFIType.ptr",
+    "FFIType.u64",
+    "FFIType.ptr",
+    "FFIType.u64",
+    "FFIType.bool",
+    "FFIType.bool",
+    "FFIType.bool",
+  ],
+  handlerParams:
+    "typePtr: number, typeLen: bigint, keyPtr: number, keyLen: bigint,\n" +
+    "          ctrl: boolean, shift: boolean, alt: boolean",
+  handlerBody:
+    "const tLen = Number(typeLen)\n" +
+    "const kLen = Number(keyLen)\n" +
+    "if (!typePtr || tLen === 0 || !keyPtr || kLen === 0) { return }\n" +
+    "const type = decodeStringPointer(typePtr, tLen)\n" +
+    "const key = decodeStringPointer(keyPtr, kLen)\n" +
+    'if (type !== "key") { return }\n' +
+    "queueMicrotask(() => { handler({ key, ctrl, shift, alt }) })",
+  typeGuard: "type",
+  typeScriptHandlerType:
+    "(event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => void",
+};
+
+const RESIZE_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
+  ffiArgs: ["FFIType.u32", "FFIType.u32"],
+  handlerParams: "width: number, height: number",
+  handlerBody: "queueMicrotask(() => { handler({ width, height }) })",
+  typeGuard: "",
+  typeScriptHandlerType: "(event: { width: number; height: number }) => void",
+};
+
+const MOUSE_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
+  ffiArgs: [
+    "FFIType.ptr",
+    "FFIType.u64",
+    "FFIType.ptr",
+    "FFIType.u64",
+    "FFIType.u32",
+    "FFIType.u32",
+    "FFIType.u32",
+    "FFIType.bool",
+    "FFIType.bool",
+    "FFIType.bool",
+    "FFIType.u32",
+  ],
+  handlerParams:
+    "typePtr: number, typeLen: bigint, kindPtr: number, kindLen: bigint,\n" +
+    "         button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number",
+  handlerBody:
+    "const tLen = Number(typeLen)\n" +
+    "const kLen = Number(kindLen)\n" +
+    "if (!typePtr || tLen === 0 || !kindPtr || kLen === 0) { return }\n" +
+    "const type = decodeStringPointer(typePtr, tLen)\n" +
+    "const kind = decodeStringPointer(kindPtr, kLen)\n" +
+    'if (type !== "mouse") { return }\n' +
+    "queueMicrotask(() => { handler({ kind, button, x, y, ctrl, shift, alt, scrollDir }) })",
+  typeGuard: "type",
+  typeScriptHandlerType:
+    "(event: { kind: string; button: number; x: number; y: number; ctrl: boolean; shift: boolean; alt: boolean; scrollDir: number }) => void",
+};
+
 function main(): void {
   const schemaPath = join(
     import.meta.dirname,
@@ -191,6 +279,11 @@ const lib = backend.loadLibrary(libPath, {
   ffiContent += `})
 
 const textEncoder = new TextEncoder()
+const textDecoder = new TextDecoder()
+
+function decodeStringPointer(ptr: number, len: bigint): string {
+  return textDecoder.decode(backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, Number(len)))
+}
 
 function rgbaPtr(color: RGBAInput): Pointer<void> {
   const rgba = toRGBA(color)
@@ -242,83 +335,25 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
   ffiContent += "  events: {\n";
   ffiContent += "    setEventCallback(\n";
   ffiContent += "      p: Pointer<Renderer>,\n";
-  ffiContent += "      callbackPtr: Pointer<Renderer> | 0\n";
+  ffiContent += "      callbackPtr: Pointer<void> | 0\n";
   ffiContent += "    ): void {\n";
   ffiContent += "      lib.symbols.setEventCallback(p, callbackPtr)\n";
   ffiContent += "    },\n";
   ffiContent += "    setResizeCallback(\n";
   ffiContent += "      p: Pointer<Renderer>,\n";
-  ffiContent += "      callbackPtr: Pointer<Renderer> | 0\n";
+  ffiContent += "      callbackPtr: Pointer<void> | 0\n";
   ffiContent += "    ): void {\n";
   ffiContent += "      lib.symbols.setResizeCallback(p, callbackPtr)\n";
   ffiContent += "    },\n";
   ffiContent += "    createEventCallback(\n";
-  ffiContent +=
-    "      handler: (event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => void\n";
-  ffiContent += `    ): import("./platform/types").FFICallbackInstance {\n`;
-  ffiContent += "      return lib.createCallback(\n";
-  ffiContent += "        (\n";
-  ffiContent +=
-    "          typePtr: number, typeLen: bigint, keyPtr: number, keyLen: bigint,\n";
-  ffiContent += "          ctrl: boolean, shift: boolean, alt: boolean\n";
-  ffiContent += "        ) => {\n";
-  ffiContent += "          const tLen = Number(typeLen)\n";
-  ffiContent += "          const kLen = Number(keyLen)\n";
-  ffiContent +=
-    "          if (!typePtr || tLen === 0 || !keyPtr || kLen === 0) { return }\n";
-  ffiContent +=
-    "          const type = new TextDecoder().decode(backend.toArrayBuffer(backend.toPointer<void>(typePtr), 0, tLen))\n";
-  ffiContent +=
-    "          const key = new TextDecoder().decode(backend.toArrayBuffer(backend.toPointer<void>(keyPtr), 0, kLen))\n";
-  ffiContent += `          if (type !== "key") { return }\n`;
-  ffiContent +=
-    "          queueMicrotask(() => { handler({ key, ctrl, shift, alt }) })\n";
-  ffiContent += "        },\n";
-  ffiContent +=
-    "        { args: [FFIType.ptr, FFIType.u64, FFIType.ptr, FFIType.u64, FFIType.bool, FFIType.bool, FFIType.bool], returns: FFIType.void }\n";
-  ffiContent += "      )\n";
-  ffiContent += "    },\n";
+  ffiContent += emitCallbackFactory(EVENT_CALLBACK_DESCRIPTOR, "    ");
   ffiContent += "    createResizeCallback(\n";
-  ffiContent +=
-    "      handler: (event: { width: number; height: number }) => void\n";
-  ffiContent += `    ): import("./platform/types").FFICallbackInstance {\n`;
-  ffiContent += "      return lib.createCallback(\n";
-  ffiContent += "        (width: number, height: number) => {\n";
-  ffiContent +=
-    "          queueMicrotask(() => { handler({ width, height }) })\n";
-  ffiContent += "        },\n";
-  ffiContent +=
-    "        { args: [FFIType.u32, FFIType.u32], returns: FFIType.void }\n";
-  ffiContent += "      )\n";
-  ffiContent += "    },\n";
+  ffiContent += emitCallbackFactory(RESIZE_CALLBACK_DESCRIPTOR, "    ");
   ffiContent += "    createMouseCallback(\n";
-  ffiContent +=
-    "      handler: (event: { kind: string; button: number; x: number; y: number; ctrl: boolean; shift: boolean; alt: boolean; scrollDir: number }) => void\n";
-  ffiContent += `    ): import("./platform/types").FFICallbackInstance {\n`;
-  ffiContent += "      return lib.createCallback(\n";
-  ffiContent +=
-    "        (typePtr: number, typeLen: bigint, kindPtr: number, kindLen: bigint,\n";
-  ffiContent +=
-    "         button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number) => {\n";
-  ffiContent += "          const tLen = Number(typeLen)\n";
-  ffiContent += "          const kLen = Number(kindLen)\n";
-  ffiContent +=
-    "          if (!typePtr || tLen === 0 || !kindPtr || kLen === 0) { return }\n";
-  ffiContent +=
-    "          const type = new TextDecoder().decode(backend.toArrayBuffer(backend.toPointer<void>(typePtr), 0, tLen))\n";
-  ffiContent +=
-    "          const kind = new TextDecoder().decode(backend.toArrayBuffer(backend.toPointer<void>(kindPtr), 0, kLen))\n";
-  ffiContent += '          if (type !== "mouse") { return }\n';
-  ffiContent +=
-    "          queueMicrotask(() => { handler({ kind, button, x, y, ctrl, shift, alt, scrollDir }) })\n";
-  ffiContent += "        },\n";
-  ffiContent +=
-    "        { args: [FFIType.ptr, FFIType.u64, FFIType.ptr, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.bool, FFIType.bool, FFIType.bool, FFIType.u32], returns: FFIType.void }\n";
-  ffiContent += "      )\n";
-  ffiContent += "    },\n";
+  ffiContent += emitCallbackFactory(MOUSE_CALLBACK_DESCRIPTOR, "    ");
   ffiContent += "    setMouseCallback(\n";
   ffiContent += "      p: Pointer<Renderer>,\n";
-  ffiContent += "      callbackPtr: Pointer<Renderer> | 0\n";
+  ffiContent += "      callbackPtr: Pointer<void> | 0\n";
   ffiContent += "    ): void {\n";
   ffiContent += "      lib.symbols.setMouseCallback(p, callbackPtr)\n";
   ffiContent += "    },\n";

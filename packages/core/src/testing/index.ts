@@ -1,5 +1,6 @@
 import type { CapturedFrame } from "../buffer";
 import { api } from "../ffi";
+import { buttonToNative, scrollDirectionToNative } from "../mouse";
 import { CliRenderer, type RenderStats } from "../renderer";
 
 export interface TestRendererOptions {
@@ -182,37 +183,9 @@ export function createTestRenderer(
     },
   };
 
-  function buttonToNative(button?: "left" | "middle" | "right"): number {
-    switch (button) {
-      case "middle":
-        return 1;
-      case "right":
-        return 2;
-      default:
-        return 0;
-    }
-  }
-
-  function scrollDirToNative(
-    direction: "up" | "down" | "left" | "right"
-  ): number {
-    switch (direction) {
-      case "up":
-        return 1;
-      case "down":
-        return 2;
-      case "left":
-        return 3;
-      case "right":
-        return 4;
-      default:
-        return 1;
-    }
-  }
-
   const mockMouse: MockMouse = {
     click(x, y, options = {}) {
-      const btn = buttonToNative(options.button);
+      const btn = buttonToNative(options.button ?? "left");
       const ctrl = options.ctrl ?? false;
       const shift = options.shift ?? false;
       const alt = options.alt ?? false;
@@ -228,7 +201,7 @@ export function createTestRenderer(
     },
 
     scroll(x, y, direction) {
-      const scrollDir = scrollDirToNative(direction);
+      const scrollDir = scrollDirectionToNative(direction);
       renderer.injectMouseEvent(
         "scroll",
         3,
@@ -242,7 +215,7 @@ export function createTestRenderer(
     },
 
     down(x, y, options = {}) {
-      const btn = buttonToNative(options.button);
+      const btn = buttonToNative(options.button ?? "left");
       const ctrl = options.ctrl ?? false;
       const shift = options.shift ?? false;
       const alt = options.alt ?? false;
@@ -250,7 +223,7 @@ export function createTestRenderer(
     },
 
     up(x, y, options = {}) {
-      const btn = buttonToNative(options.button);
+      const btn = buttonToNative(options.button ?? "left");
       const ctrl = options.ctrl ?? false;
       const shift = options.shift ?? false;
       const alt = options.alt ?? false;

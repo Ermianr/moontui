@@ -17,6 +17,53 @@ The Rust codebase SHALL conform to the rules defined in `rustfmt.toml`. The comm
 - **WHEN** `bun run fmt:rust:check` is run on code that does not conform to `rustfmt.toml`
 - **THEN** it exits with non-zero status and lists the non-conforming files
 
+### Requirement: Integration tests use correct unsafe allowances
+Integration test files SHALL only include `#![allow(unsafe_code)]` when they actually contain `unsafe` blocks. Files that do not use `unsafe` SHALL NOT have this attribute.
+
+#### Scenario: Test files without unsafe do not have allow attribute
+- **WHEN** `tests/terminal_tests.rs`, `tests/resize_tests.rs`, or `tests/render_tests.rs` is inspected
+- **THEN** it SHALL NOT contain `#![allow(unsafe_code)]`
+
+#### Scenario: Test files with unsafe retain allow attribute
+- **WHEN** `tests/buffer_tests.rs` or `tests/input_tests.rs` is inspected
+- **THEN** they SHALL retain `#![allow(unsafe_code)]` because they contain `unsafe` blocks
+
+### Requirement: Test files clean up native resources
+All test files that create `CliRenderer` instances via FFI SHALL call `destroyRenderer` to clean up native resources.
+
+#### Scenario: buffer.test.ts destroys renderer in every test
+- **WHEN** `packages/core/src/buffer.test.ts` is inspected
+- **THEN** every test that creates a renderer SHALL call `api.renderer.destroyRenderer(rendererPtr)` before the test ends
+
+### Requirement: Inverse mapping functions are co-located with forward mappings
+The `mouse.ts` module SHALL export `buttonToNative(button: MouseButton): number` and `scrollDirectionToNative(direction: ScrollDirection): number` alongside their forward counterparts `buttonFromNative` and `scrollDirectionFromNative`. The `testing/index.ts` module SHALL import these functions instead of defining local duplicates.
+
+#### Scenario: mouse.ts exports inverse functions
+- **WHEN** `packages/core/src/mouse.ts` is inspected
+- **THEN** it SHALL export `buttonToNative` and `scrollDirectionToNative`
+
+#### Scenario: testing/index.ts imports from mouse.ts
+- **WHEN** `packages/core/src/testing/index.ts` is inspected
+- **THEN** it SHALL import `buttonToNative` and `scrollDirectionToNative` from `../mouse`
+- **AND** it SHALL NOT contain local `buttonToNative` or `scrollDirToNative` function definitions
+
+### Requirement: ansi.rs deduplicates write_fg/write_bg
+The `ansi.rs` module SHALL use a shared private `write_color()` helper for foreground and background color writing, with `write_fg` and `write_bg` delegating to it.
+
+#### Scenario: write_fg and write_bg delegate to write_color
+- **WHEN** `crates/moontui-core/src/ansi.rs` is inspected
+- **THEN** `write_fg` and `write_bg` SHALL be thin wrappers that call a private `write_color` function
+- **AND** the `write_color` function SHALL accept an `is_fg: bool` parameter
+
+### Requirement: README documents actual API
+The `packages/core/README.md` SHALL document the actual `CliRenderer` API, not a non-existent `Terminal` class.
+
+#### Scenario: README matches implementation
+- **WHEN** `packages/core/README.md` is read
+- **THEN** it SHALL reference `CliRenderer` as the main entry point
+- **AND** it SHALL document `setupTerminal()`, `render()`, `on()`, `restoreTerminal()`, `destroy()`
+- **AND** it SHALL NOT reference a `Terminal` class with `init()`, `draw()`, `flush()`, `waitForInput()`
+
 ### Requirement: Rust clippy passes with zero warnings
 The Rust codebase MUST pass `bun run lint:rust` (which wraps `cargo clippy --workspace --all-targets -- --deny warnings`) with zero errors and zero warnings. The workspace clippy configuration in `Cargo.toml` SHALL be accurately documented in `AGENTS.md`.
 

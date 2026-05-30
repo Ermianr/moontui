@@ -204,15 +204,13 @@ export class MoonBuffer {
         const ch = charDV.getUint32(idx * 4, true);
         const charStr = ch === 0 ? " " : String.fromCodePoint(ch);
 
-        // Read packed values and create RGBA directly from buffer
         const fgOff = idx * 8;
         const fgBuffer = new Uint16Array(4);
         fgBuffer[0] = fgDV.getUint16(fgOff, true);
         fgBuffer[1] = fgDV.getUint16(fgOff + 2, true);
         fgBuffer[2] = fgDV.getUint16(fgOff + 4, true);
         fgBuffer[3] = fgDV.getUint16(fgOff + 6, true);
-        const fg = new RGBA(0, 0, 0);
-        (fg as { buffer: Uint16Array }).buffer = fgBuffer;
+        const fg = RGBA.fromPackedBuffer(fgBuffer);
 
         const bgOff = idx * 8;
         const bgBuffer = new Uint16Array(4);
@@ -220,8 +218,7 @@ export class MoonBuffer {
         bgBuffer[1] = bgDV.getUint16(bgOff + 2, true);
         bgBuffer[2] = bgDV.getUint16(bgOff + 4, true);
         bgBuffer[3] = bgDV.getUint16(bgOff + 6, true);
-        const bg = new RGBA(0, 0, 0);
-        (bg as { buffer: Uint16Array }).buffer = bgBuffer;
+        const bg = RGBA.fromPackedBuffer(bgBuffer);
 
         const attr = attrDV.getUint32(idx * 4, true);
         const styleAttrs = attr & ~ATTR_CONTINUATION;
