@@ -165,7 +165,7 @@ const lib = backend.loadLibrary(libPath, {
   clearOutput: { args: [FFIType.ptr], returns: FFIType.void },
   disableMouse: { args: [FFIType.ptr], returns: FFIType.void },
   enableMouse: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.void },
-  getMousePointerStyle: { args: [FFIType.ptr], returns: FFIType.ptr },
+  getMousePointerStyle: { args: [FFIType.ptr], returns: FFIType.u32 },
   height: { args: [FFIType.ptr], returns: FFIType.u32 },
   hitGridAdd: {
     args: [
@@ -203,7 +203,7 @@ const lib = backend.loadLibrary(libPath, {
   setEventCallback: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
   setMouseCallback: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
   setMousePointerStyle: {
-    args: [FFIType.ptr, FFIType.ptr],
+    args: [FFIType.ptr, FFIType.u32],
     returns: FFIType.void,
   },
   setResizeCallback: {
@@ -214,6 +214,13 @@ const lib = backend.loadLibrary(libPath, {
 });
 
 const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function decodeStringPointer(ptr: number, len: number): string {
+  return textDecoder.decode(
+    backend.toArrayBuffer(backend.toPointer<void>(ptr), 0, len)
+  );
+}
 
 function rgbaPtr(color: RGBAInput): Pointer<void> {
   const rgba = toRGBA(color);
@@ -347,8 +354,8 @@ export const api = {
     enableMouse(p: Pointer<Renderer>, enableMovement: boolean): void {
       lib.symbols.enableMouse(p, ffiBool(enableMovement));
     },
-    getMousePointerStyle(p: Pointer<Renderer>): Pointer<void> {
-      return toPointer(lib.symbols.getMousePointerStyle(p));
+    getMousePointerStyle(p: Pointer<Renderer>): number {
+      return lib.symbols.getMousePointerStyle(p);
     },
     height(p: Pointer<Renderer>): number {
       return lib.symbols.height(p);
@@ -410,7 +417,7 @@ export const api = {
     setMouseCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
       lib.symbols.setMouseCallback(p, cb);
     },
-    setMousePointerStyle(p: Pointer<Renderer>, style: Pointer<void>): void {
+    setMousePointerStyle(p: Pointer<Renderer>, style: number): void {
       lib.symbols.setMousePointerStyle(p, style);
     },
     setResizeCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
@@ -489,7 +496,7 @@ export const api = {
       alt: boolean,
       scrollDir: number
     ): void {
-      const kindBuf = new TextEncoder().encode(kind);
+      const kindBuf = textEncoder.encode(kind);
       lib.symbols.injectMouseEvent(
         p,
         kindBuf,
@@ -544,13 +551,13 @@ export const api = {
   events: {
     setEventCallback(
       p: Pointer<Renderer>,
-      callbackPtr: Pointer<Renderer> | 0
+      callbackPtr: Pointer<void> | 0
     ): void {
       lib.symbols.setEventCallback(p, callbackPtr);
     },
     setResizeCallback(
       p: Pointer<Renderer>,
-      callbackPtr: Pointer<Renderer> | 0
+      callbackPtr: Pointer<void> | 0
     ): void {
       lib.symbols.setResizeCallback(p, callbackPtr);
     },
@@ -577,12 +584,8 @@ export const api = {
           if (!typePtr || tLen === 0 || !keyPtr || kLen === 0) {
             return;
           }
-          const type = new TextDecoder().decode(
-            backend.toArrayBuffer(backend.toPointer<void>(typePtr), 0, tLen)
-          );
-          const key = new TextDecoder().decode(
-            backend.toArrayBuffer(backend.toPointer<void>(keyPtr), 0, kLen)
-          );
+          const type = decodeStringPointer(typePtr, tLen);
+          const key = decodeStringPointer(keyPtr, kLen);
           if (type !== "key") {
             return;
           }
@@ -647,12 +650,8 @@ export const api = {
           if (!typePtr || tLen === 0 || !kindPtr || kLen === 0) {
             return;
           }
-          const type = new TextDecoder().decode(
-            backend.toArrayBuffer(backend.toPointer<void>(typePtr), 0, tLen)
-          );
-          const kind = new TextDecoder().decode(
-            backend.toArrayBuffer(backend.toPointer<void>(kindPtr), 0, kLen)
-          );
+          const type = decodeStringPointer(typePtr, tLen);
+          const kind = decodeStringPointer(kindPtr, kLen);
           if (type !== "mouse") {
             return;
           }
@@ -680,7 +679,7 @@ export const api = {
     },
     setMouseCallback(
       p: Pointer<Renderer>,
-      callbackPtr: Pointer<Renderer> | 0
+      callbackPtr: Pointer<void> | 0
     ): void {
       lib.symbols.setMouseCallback(p, callbackPtr);
     },

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { api, type Pointer, type Renderer } from "./ffi";
+import { api } from "./ffi";
 
 test("api.terminal.getTerminalSize returns { width, height } object", () => {
   const size = api.terminal.getTerminalSize();
@@ -51,10 +51,7 @@ test("api.events.createEventCallback creates working callback", () => {
   expect(callback.ptr).toBeDefined();
   expect(typeof callback.close).toBe("function");
 
-  api.events.setEventCallback(
-    rendererPtr,
-    callback.ptr as unknown as Pointer<Renderer>
-  );
+  api.events.setEventCallback(rendererPtr, callback.ptr);
   api.terminal.setupTerminal(rendererPtr, false, false, false);
 
   api.renderer.destroyRenderer(rendererPtr);

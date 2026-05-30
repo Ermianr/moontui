@@ -367,7 +367,7 @@ pub extern "C" fn injectResizeEvent(renderer: *mut CliRenderer, width: u32, heig
 /// @ffi_manual
 /// @ts_args p: Pointer<Renderer>, kind: string, button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number
 /// @ts_returns void
-/// @ts_body const kindBuf = new TextEncoder().encode(kind); lib.symbols.injectMouseEvent(p, kindBuf, BigInt(kindBuf.byteLength), button, x, y, ctrl, shift, alt, scrollDir)
+/// @ts_body const kindBuf = textEncoder.encode(kind); lib.symbols.injectMouseEvent(p, kindBuf, BigInt(kindBuf.byteLength), button, x, y, ctrl, shift, alt, scrollDir)
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]

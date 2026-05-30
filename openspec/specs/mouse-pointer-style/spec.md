@@ -80,6 +80,8 @@ The following FFI functions SHALL be exported:
 - `setMousePointerStyle(renderer, style: u32)` — set cursor shape
 - `getMousePointerStyle(renderer) -> u32` — query current cursor shape
 
+The proc macro SHALL resolve `MousePointerStyle` to `u32` (not `ptr`) in the schema.
+
 #### Scenario: FFI set pointer style
 - **WHEN** `setMousePointerStyle(renderer_ptr, 1)` is called via FFI
 - **THEN** the pointer style SHALL be set to `Pointer` (value 1)
@@ -89,9 +91,14 @@ The following FFI functions SHALL be exported:
 - **AND** the current style is `Crosshair` (value 3)
 - **THEN** the return value SHALL be `3`
 
+#### Scenario: Proc macro resolves MousePointerStyle as u32
+- **WHEN** `cargo build` generates `target/moontui-schema.json`
+- **THEN** the `setMousePointerStyle` function's `style` parameter type SHALL be `"u32"`
+- **AND** it SHALL NOT be `"ptr"`
+
 ### Requirement: TypeScript CliRenderer SHALL expose pointer style API
 
-The TypeScript `CliRenderer` SHALL expose `setMousePointerStyle(style: MousePointerStyle)` and `getMousePointerStyle(): MousePointerStyle` that delegate to the native FFI calls.
+The TypeScript `CliRenderer` SHALL expose `setMousePointerStyle(style: MousePointerStyle)` and `getMousePointerStyle(): MousePointerStyle` that delegate to the native FFI calls. The enum mapping SHALL be centralized in `mouse.ts` via `mousePointerStyleToNative()` and `mousePointerStyleFromNative()` helper functions, derived from a single source-of-truth const.
 
 #### Scenario: TS set pointer style
 - **WHEN** `renderer.setMousePointerStyle("pointer")` is called
@@ -100,6 +107,14 @@ The TypeScript `CliRenderer` SHALL expose `setMousePointerStyle(style: MousePoin
 #### Scenario: TS get pointer style
 - **WHEN** `renderer.getMousePointerStyle()` is called
 - **THEN** it SHALL return the current style as a string (`"default"`, `"pointer"`, `"text"`, `"crosshair"`, `"move"`, `"not-allowed"`)
+
+#### Scenario: Mapping functions are centralized
+- **WHEN** `mousePointerStyleToNative("crosshair")` is called from `mouse.ts`
+- **THEN** it SHALL return `3`
+
+#### Scenario: Reverse mapping is centralized
+- **WHEN** `mousePointerStyleFromNative(4)` is called from `mouse.ts`
+- **THEN** it SHALL return `"move"`
 
 ## Invariants
 

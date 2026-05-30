@@ -109,6 +109,17 @@ export function buttonFromNative(button: number): MouseButton {
   }
 }
 
+export function buttonToNative(button: MouseButton): number {
+  switch (button) {
+    case "middle":
+      return 1;
+    case "right":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
 export function scrollDirectionFromNative(dir: number): ScrollDirection {
   switch (dir) {
     case 1:
@@ -122,4 +133,45 @@ export function scrollDirectionFromNative(dir: number): ScrollDirection {
     default:
       return "up";
   }
+}
+
+export function scrollDirectionToNative(direction: ScrollDirection): number {
+  switch (direction) {
+    case "up":
+      return 1;
+    case "down":
+      return 2;
+    case "left":
+      return 3;
+    case "right":
+      return 4;
+    default:
+      return 1;
+  }
+}
+
+const MOUSE_POINTER_STYLE_NATIVE: Record<MousePointerStyle, number> = {
+  default: 0,
+  pointer: 1,
+  text: 2,
+  crosshair: 3,
+  move: 4,
+  "not-allowed": 5,
+};
+
+export function mousePointerStyleToNative(style: MousePointerStyle): number {
+  return MOUSE_POINTER_STYLE_NATIVE[style];
+}
+
+const MOUSE_POINTER_STYLE_REVERSE: Record<number, MousePointerStyle> = {
+  0: "default",
+  1: "pointer",
+  2: "text",
+  3: "crosshair",
+  4: "move",
+  5: "not-allowed",
+};
+
+export function mousePointerStyleFromNative(native: number): MousePointerStyle {
+  return MOUSE_POINTER_STYLE_REVERSE[native] ?? "default";
 }

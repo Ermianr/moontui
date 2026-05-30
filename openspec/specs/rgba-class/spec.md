@@ -9,7 +9,7 @@ The `RGBA` class provides a reusable, pre-allocated color buffer backed by `Uint
 ## Requirements
 
 ### Requirement: RGBA class holds pre-allocated color buffer
-The `RGBA` class SHALL store color channels in a pre-allocated `Uint16Array(4)`. Construction SHALL accept individual channel values `(r, g, b, a?)` where `a` defaults to `65535`. Each channel value SHALL be packed into the low byte of the `u16`, with the `ColorIntent` stored in the high byte.
+The `RGBA` class SHALL store color channels in a pre-allocated `Uint16Array(4)`. Construction SHALL accept individual channel values `(r, g, b, a?)` where `a` defaults to `65535`. Each channel value SHALL be packed into the low byte of the `u16`, with the `ColorIntent` stored in the high byte. The class SHALL also provide a static `fromPackedBuffer(buffer: Uint16Array)` factory that constructs from pre-packed data without re-encoding.
 
 #### Scenario: Construct RGBA with all channels
 - **WHEN** `new RGBA(255, 128, 0, 65535)` is called
@@ -29,6 +29,11 @@ The `RGBA` class SHALL store color channels in a pre-allocated `Uint16Array(4)`.
 #### Scenario: Construct RGBA with Default intent
 - **WHEN** `new RGBA(0, 0, 0, 65535, ColorIntent.Default)` is called
 - **THEN** `rgba.intent` getter SHALL return `ColorIntent.Default`
+
+#### Scenario: Construct from pre-packed buffer
+- **WHEN** `RGBA.fromPackedBuffer(packedUint16Array)` is called
+- **THEN** the result SHALL be an `RGBA` instance with `buffer` equal to the input array
+- **AND** no `packComponent` transformation SHALL be applied
 
 ### Requirement: RGBA class exposes channel accessors
 The `RGBA` class SHALL provide read-only accessors for individual color channels. The accessors SHALL extract the 8-bit value from the low byte of each `u16`.

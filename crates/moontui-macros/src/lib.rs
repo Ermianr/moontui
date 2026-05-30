@@ -258,12 +258,7 @@ fn struct_field_info_by_type(type_name: &str) -> (String, usize, usize) {
     "i8" => ("i8".to_string(), 1, 1),
     "u16" => ("u16".to_string(), 2, 2),
     "i16" => ("i16".to_string(), 2, 2),
-    "u32" => ("u32".to_string(), 4, 4),
-    "i32" => ("i32".to_string(), 4, 4),
-    "f32" => ("f32".to_string(), 4, 4),
-    "u64" | "usize" => ("u64".to_string(), 8, 8),
-    "i64" | "isize" => ("i64".to_string(), 8, 8),
-    "f64" => ("f64".to_string(), 8, 8),
+    "u32" | "MousePointerStyle" => ("u32".to_string(), 4, 4),
     _ => ("ptr".to_string(), std::mem::size_of::<*const ()>(), std::mem::align_of::<*const ()>()),
   }
 }

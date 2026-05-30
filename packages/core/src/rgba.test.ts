@@ -113,3 +113,26 @@ test("ColorIntent enum values", () => {
   expect(ColorIntent.Indexed).toBe(1);
   expect(ColorIntent.Default).toBe(2);
 });
+
+test("RGBA.fromPackedBuffer constructs from valid packed buffer", () => {
+  const packed = new Uint16Array([0x00_ff, 0x00_80, 0x00_00, 0xff_ff]);
+  const rgba = RGBA.fromPackedBuffer(packed);
+  expect(rgba).toBeInstanceOf(RGBA);
+  expect(rgba.buffer[0]).toBe(0x00_ff);
+  expect(rgba.r).toBe(255);
+  expect(rgba.g).toBe(128);
+  expect(rgba.b).toBe(0);
+  expect(rgba.intent).toBe(ColorIntent.Rgb);
+});
+
+test("RGBA.fromPackedBuffer rejects buffer with wrong length", () => {
+  expect(() => RGBA.fromPackedBuffer(new Uint16Array([1, 2, 3]))).toThrow(
+    "expected length 4"
+  );
+});
+
+test("RGBA.fromPackedBuffer rejects empty buffer", () => {
+  expect(() => RGBA.fromPackedBuffer(new Uint16Array([]))).toThrow(
+    "expected length 4"
+  );
+});

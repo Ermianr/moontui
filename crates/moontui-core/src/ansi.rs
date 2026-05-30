@@ -6,52 +6,40 @@ pub fn write_move_cursor(out: &mut Vec<u8>, x: u32, y: u32) {
   let _ = write!(out, "\x1B[{};{}H", y + 1, x + 1);
 }
 
-pub fn write_fg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
+fn write_color(out: &mut Vec<u8>, color: RGBA, caps: Capabilities, is_fg: bool) {
   let intent = color::intent(color);
+  let param = if is_fg { 38 } else { 48 };
   match intent {
     ColorIntent::Default => {
-      out.extend_from_slice(b"\x1B[39m");
+      let code = if is_fg { b"39" } else { b"49" };
+      out.extend_from_slice(b"\x1B[");
+      out.extend_from_slice(code);
+      out.push(b'm');
     }
     ColorIntent::Indexed => {
       let s = color::slot(color);
-      let _ = write!(out, "\x1B[38;5;{s}m");
+      let _ = write!(out, "\x1B[{param};5;{s}m");
     }
     ColorIntent::Rgb => {
       if caps.rgb {
         let r = color::red(color);
         let g = color::green(color);
         let b = color::blue(color);
-        let _ = write!(out, "\x1B[38;2;{r};{g};{b}m");
+        let _ = write!(out, "\x1B[{param};2;{r};{g};{b}m");
       } else {
         let index = color::nearest_palette_index(color);
-        let _ = write!(out, "\x1B[38;5;{index}m");
+        let _ = write!(out, "\x1B[{param};5;{index}m");
       }
     }
   }
 }
 
+pub fn write_fg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
+  write_color(out, color, caps, true);
+}
+
 pub fn write_bg(out: &mut Vec<u8>, color: RGBA, caps: Capabilities) {
-  let intent = color::intent(color);
-  match intent {
-    ColorIntent::Default => {
-      out.extend_from_slice(b"\x1B[49m");
-    }
-    ColorIntent::Indexed => {
-      let s = color::slot(color);
-      let _ = write!(out, "\x1B[48;5;{s}m");
-    }
-    ColorIntent::Rgb => {
-      if caps.rgb {
-        let r = color::red(color);
-        let g = color::green(color);
-        let b = color::blue(color);
-        let _ = write!(out, "\x1B[48;2;{r};{g};{b}m");
-      } else {
-        let index = color::nearest_palette_index(color);
-        let _ = write!(out, "\x1B[48;5;{index}m");
-      }
-    }
-  }
+  write_color(out, color, caps, false);
 }
 
 pub fn write_style(out: &mut Vec<u8>, attributes: u32) {

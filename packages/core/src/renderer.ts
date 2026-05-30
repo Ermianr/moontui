@@ -10,6 +10,8 @@ import {
   buttonFromNative,
   MouseEvent as MoonMouseEvent,
   type MousePointerStyle,
+  mousePointerStyleFromNative,
+  mousePointerStyleToNative,
   type RawMouseEvent,
   scrollDirectionFromNative,
 } from "./mouse";
@@ -130,10 +132,7 @@ export class CliRenderer {
       }
     );
 
-    api.events.setEventCallback(
-      this._ptr,
-      this._eventCallback.ptr as unknown as Pointer<Renderer>
-    );
+    api.events.setEventCallback(this._ptr, this._eventCallback.ptr);
 
     this._resizeCallback = api.events.createResizeCallback(
       (event: { width: number; height: number }) => {
@@ -149,10 +148,7 @@ export class CliRenderer {
       }
     );
 
-    api.events.setResizeCallback(
-      this._ptr,
-      this._resizeCallback.ptr as unknown as Pointer<Renderer>
-    );
+    api.events.setResizeCallback(this._ptr, this._resizeCallback.ptr);
 
     if (this._useMouse) {
       this._mouseCallback = api.events.createMouseCallback(
@@ -189,10 +185,7 @@ export class CliRenderer {
         }
       );
 
-      api.events.setMouseCallback(
-        this._ptr,
-        this._mouseCallback.ptr as unknown as Pointer<Renderer>
-      );
+      api.events.setMouseCallback(this._ptr, this._mouseCallback?.ptr);
     }
   }
 
@@ -239,13 +232,13 @@ export class CliRenderer {
     }
     this._destroyed = true;
     if (this._mouseCallback) {
-      api.events.setMouseCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
+      api.events.setMouseCallback(this._ptr, 0);
       this._mouseCallback.close();
       this._mouseCallback = null;
     }
-    api.events.setEventCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
+    api.events.setEventCallback(this._ptr, 0);
     this._eventCallback.close();
-    api.events.setResizeCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
+    api.events.setResizeCallback(this._ptr, 0);
     this._resizeCallback.close();
     const result = api.renderer.destroyRenderer(this._ptr);
     if (result !== 0) {
@@ -265,14 +258,10 @@ export class CliRenderer {
     this._emitter.emit("frame", { type: "frame", stats });
   }
 
-  private getBuffer(getter: () => Pointer<Renderer>): MoonBuffer {
+  private getBuffer(getter: () => Pointer<FfiBuffer>): MoonBuffer {
     this.guard();
     const bufPtr = getter();
-    return new MoonBuffer(
-      bufPtr as unknown as Pointer<FfiBuffer>,
-      this._width,
-      this._height
-    );
+    return new MoonBuffer(bufPtr, this._width, this._height);
   }
 
   getCurrentBuffer(): MoonBuffer {
@@ -377,32 +366,16 @@ export class CliRenderer {
 
   setMousePointerStyle(style: MousePointerStyle): void {
     this.guard();
-    const styleMap: Record<MousePointerStyle, number> = {
-      default: 0,
-      pointer: 1,
-      text: 2,
-      crosshair: 3,
-      move: 4,
-      "not-allowed": 5,
-    };
     api.renderer.setMousePointerStyle(
       this._ptr,
-      styleMap[style] as unknown as Pointer<void>
+      mousePointerStyleToNative(style)
     );
   }
 
   getMousePointerStyle(): MousePointerStyle {
     this.guard();
-    const styleMap: Record<number, MousePointerStyle> = {
-      0: "default",
-      1: "pointer",
-      2: "text",
-      3: "crosshair",
-      4: "move",
-      5: "not-allowed",
-    };
     const ptr = api.renderer.getMousePointerStyle(this._ptr);
-    return styleMap[Number(ptr)] ?? "default";
+    return mousePointerStyleFromNative(Number(ptr));
   }
 
   addToHitGrid(

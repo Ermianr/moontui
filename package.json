@@ -49,7 +49,10 @@
   },
   "lint-staged": {
     "*.rs": "node -e \"require('child_process').execSync('cargo fmt --all',{stdio:'inherit'})\"",
-    "*.{ts,tsx}": "ultracite fix"
+    "*.{ts,tsx}": [
+      "ultracite fix",
+      "bun run typecheck"
+    ]
   },
   "engines": {
     "bun": ">=1.3.0"

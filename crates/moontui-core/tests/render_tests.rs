@@ -1,5 +1,3 @@
-#![allow(unsafe_code)]
-
 use moontui_core::renderer::CliRenderer;
 
 #[test]
