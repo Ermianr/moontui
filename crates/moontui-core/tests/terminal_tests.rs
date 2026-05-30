@@ -5,7 +5,7 @@ use moontui_core::renderer::CliRenderer;
 #[test]
 fn test_setup_terminal_alternate_screen() {
   let mut renderer = CliRenderer::create_test_renderer(10, 5);
-  renderer.setup_terminal(true).unwrap();
+  renderer.setup_terminal(true, false, false).unwrap();
   let output = renderer.get_output_data().to_vec();
   let output_str = String::from_utf8_lossy(&output);
   assert!(output_str.contains("\x1b[?1049h"), "should enter alt screen");
@@ -16,7 +16,7 @@ fn test_setup_terminal_alternate_screen() {
 #[test]
 fn test_setup_terminal_no_alternate_screen() {
   let mut renderer = CliRenderer::create_test_renderer(10, 5);
-  renderer.setup_terminal(false).unwrap();
+  renderer.setup_terminal(false, false, false).unwrap();
   let output = renderer.get_output_data().to_vec();
   let output_str = String::from_utf8_lossy(&output);
   assert!(!output_str.contains("\x1b[?1049h"), "should NOT enter alt screen");
@@ -27,7 +27,7 @@ fn test_setup_terminal_no_alternate_screen() {
 #[test]
 fn test_restore_terminal_after_alternate_screen() {
   let mut renderer = CliRenderer::create_test_renderer(10, 5);
-  renderer.setup_terminal(true).unwrap();
+  renderer.setup_terminal(true, false, false).unwrap();
   renderer.clear_output();
   renderer.restore_terminal().unwrap();
   let output = renderer.get_output_data().to_vec();
@@ -39,7 +39,7 @@ fn test_restore_terminal_after_alternate_screen() {
 #[test]
 fn test_restore_terminal_after_non_alternate_screen() {
   let mut renderer = CliRenderer::create_test_renderer(10, 5);
-  renderer.setup_terminal(false).unwrap();
+  renderer.setup_terminal(false, false, false).unwrap();
   renderer.clear_output();
   renderer.restore_terminal().unwrap();
   let output = renderer.get_output_data().to_vec();
@@ -51,7 +51,7 @@ fn test_restore_terminal_after_non_alternate_screen() {
 #[test]
 fn test_setup_restore_terminal_pair_no_dangling() {
   let mut renderer = CliRenderer::create_test_renderer(10, 5);
-  renderer.setup_terminal(true).unwrap();
+  renderer.setup_terminal(true, false, false).unwrap();
   renderer.restore_terminal().unwrap();
   let output = renderer.get_output_data().to_vec();
   let output_str = String::from_utf8_lossy(&output);

@@ -120,13 +120,31 @@ const lib = backend.loadLibrary(libPath, {
   getNextBuffer: { args: [FFIType.ptr], returns: FFIType.ptr },
   getRenderStats: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
   getTerminalSize: { args: [], returns: FFIType.u64 },
+  injectMouseEvent: {
+    args: [
+      FFIType.ptr,
+      FFIType.ptr,
+      FFIType.u64,
+      FFIType.u32,
+      FFIType.u32,
+      FFIType.u32,
+      FFIType.bool,
+      FFIType.bool,
+      FFIType.bool,
+      FFIType.u32,
+    ],
+    returns: FFIType.void,
+  },
   injectResizeEvent: {
     args: [FFIType.ptr, FFIType.u32, FFIType.u32],
     returns: FFIType.void,
   },
   render: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.i32 },
   restoreTerminal: { args: [FFIType.ptr], returns: FFIType.i32 },
-  setupTerminal: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.i32 },
+  setupTerminal: {
+    args: [FFIType.ptr, FFIType.bool, FFIType.bool, FFIType.bool],
+    returns: FFIType.i32,
+  },
   // --- OptimizedBuffer ---
   bufferCellAttributes: {
     args: [FFIType.ptr, FFIType.u64],
@@ -145,7 +163,34 @@ const lib = backend.loadLibrary(libPath, {
 
   // --- CliRenderer ---
   clearOutput: { args: [FFIType.ptr], returns: FFIType.void },
+  disableMouse: { args: [FFIType.ptr], returns: FFIType.void },
+  enableMouse: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.void },
+  getMousePointerStyle: { args: [FFIType.ptr], returns: FFIType.ptr },
   height: { args: [FFIType.ptr], returns: FFIType.u32 },
+  hitGridAdd: {
+    args: [
+      FFIType.ptr,
+      FFIType.u32,
+      FFIType.u32,
+      FFIType.u32,
+      FFIType.u32,
+      FFIType.u32,
+    ],
+    returns: FFIType.void,
+  },
+  hitGridCheckHit: {
+    args: [FFIType.ptr, FFIType.u32, FFIType.u32],
+    returns: FFIType.u32,
+  },
+  hitGridClear: { args: [FFIType.ptr], returns: FFIType.void },
+  hitGridClearDirty: { args: [FFIType.ptr], returns: FFIType.void },
+  hitGridClearScissorRects: { args: [FFIType.ptr], returns: FFIType.void },
+  hitGridIsDirty: { args: [FFIType.ptr], returns: FFIType.bool },
+  hitGridPopScissorRect: { args: [FFIType.ptr], returns: FFIType.void },
+  hitGridPushScissorRect: {
+    args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32],
+    returns: FFIType.void,
+  },
   processEvents: { args: [FFIType.ptr], returns: FFIType.u64 },
   resizeRenderer: {
     args: [FFIType.ptr, FFIType.u32, FFIType.u32],
@@ -156,6 +201,11 @@ const lib = backend.loadLibrary(libPath, {
     returns: FFIType.void,
   },
   setEventCallback: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
+  setMouseCallback: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
+  setMousePointerStyle: {
+    args: [FFIType.ptr, FFIType.ptr],
+    returns: FFIType.void,
+  },
   setResizeCallback: {
     args: [FFIType.ptr, FFIType.ptr],
     returns: FFIType.void,
@@ -291,8 +341,54 @@ export const api = {
     clearOutput(p: Pointer<Renderer>): void {
       lib.symbols.clearOutput(p);
     },
+    disableMouse(p: Pointer<Renderer>): void {
+      lib.symbols.disableMouse(p);
+    },
+    enableMouse(p: Pointer<Renderer>, enableMovement: boolean): void {
+      lib.symbols.enableMouse(p, ffiBool(enableMovement));
+    },
+    getMousePointerStyle(p: Pointer<Renderer>): Pointer<void> {
+      return toPointer(lib.symbols.getMousePointerStyle(p));
+    },
     height(p: Pointer<Renderer>): number {
       return lib.symbols.height(p);
+    },
+    hitGridAdd(
+      p: Pointer<Renderer>,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      id: number
+    ): void {
+      lib.symbols.hitGridAdd(p, x, y, width, height, id);
+    },
+    hitGridCheckHit(p: Pointer<Renderer>, x: number, y: number): number {
+      return lib.symbols.hitGridCheckHit(p, x, y);
+    },
+    hitGridClear(p: Pointer<Renderer>): void {
+      lib.symbols.hitGridClear(p);
+    },
+    hitGridClearDirty(p: Pointer<Renderer>): void {
+      lib.symbols.hitGridClearDirty(p);
+    },
+    hitGridClearScissorRects(p: Pointer<Renderer>): void {
+      lib.symbols.hitGridClearScissorRects(p);
+    },
+    hitGridIsDirty(p: Pointer<Renderer>): boolean {
+      return lib.symbols.hitGridIsDirty(p);
+    },
+    hitGridPopScissorRect(p: Pointer<Renderer>): void {
+      lib.symbols.hitGridPopScissorRect(p);
+    },
+    hitGridPushScissorRect(
+      p: Pointer<Renderer>,
+      x: number,
+      y: number,
+      w: number,
+      h: number
+    ): void {
+      lib.symbols.hitGridPushScissorRect(p, x, y, w, h);
     },
     processEvents(p: Pointer<Renderer>): number {
       return lib.symbols.processEvents(p);
@@ -310,6 +406,12 @@ export const api = {
     },
     setEventCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
       lib.symbols.setEventCallback(p, cb);
+    },
+    setMouseCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
+      lib.symbols.setMouseCallback(p, cb);
+    },
+    setMousePointerStyle(p: Pointer<Renderer>, style: Pointer<void>): void {
+      lib.symbols.setMousePointerStyle(p, style);
     },
     setResizeCallback(p: Pointer<Renderer>, cb: Pointer<void>): void {
       lib.symbols.setResizeCallback(p, cb);
@@ -376,6 +478,31 @@ export const api = {
         stdoutWriteTimeUs: view.getFloat64(40, true),
       };
     },
+    injectMouseEvent(
+      p: Pointer<Renderer>,
+      kind: string,
+      button: number,
+      x: number,
+      y: number,
+      ctrl: boolean,
+      shift: boolean,
+      alt: boolean,
+      scrollDir: number
+    ): void {
+      const kindBuf = new TextEncoder().encode(kind);
+      lib.symbols.injectMouseEvent(
+        p,
+        kindBuf,
+        BigInt(kindBuf.byteLength),
+        button,
+        x,
+        y,
+        ctrl,
+        shift,
+        alt,
+        scrollDir
+      );
+    },
     injectResizeEvent(
       p: Pointer<Renderer>,
       width: number,
@@ -400,8 +527,18 @@ export const api = {
     restoreTerminal(p: Pointer<Renderer>): number {
       return lib.symbols.restoreTerminal(p);
     },
-    setupTerminal(p: Pointer<Renderer>, useAlternateScreen: boolean): number {
-      return lib.symbols.setupTerminal(p, ffiBool(useAlternateScreen));
+    setupTerminal(
+      p: Pointer<Renderer>,
+      useAlternateScreen: boolean,
+      enableMouse: boolean,
+      enableMouseMovement: boolean
+    ): number {
+      return lib.symbols.setupTerminal(
+        p,
+        ffiBool(useAlternateScreen),
+        ffiBool(enableMouse),
+        ffiBool(enableMouseMovement)
+      );
     },
   },
   events: {
@@ -478,6 +615,74 @@ export const api = {
         },
         { args: [FFIType.u32, FFIType.u32], returns: FFIType.void }
       );
+    },
+    createMouseCallback(
+      handler: (event: {
+        kind: string;
+        button: number;
+        x: number;
+        y: number;
+        ctrl: boolean;
+        shift: boolean;
+        alt: boolean;
+        scrollDir: number;
+      }) => void
+    ): import("./platform/types").FFICallbackInstance {
+      return lib.createCallback(
+        (
+          typePtr: number,
+          typeLen: bigint,
+          kindPtr: number,
+          kindLen: bigint,
+          button: number,
+          x: number,
+          y: number,
+          ctrl: boolean,
+          shift: boolean,
+          alt: boolean,
+          scrollDir: number
+        ) => {
+          const tLen = Number(typeLen);
+          const kLen = Number(kindLen);
+          if (!typePtr || tLen === 0 || !kindPtr || kLen === 0) {
+            return;
+          }
+          const type = new TextDecoder().decode(
+            backend.toArrayBuffer(backend.toPointer<void>(typePtr), 0, tLen)
+          );
+          const kind = new TextDecoder().decode(
+            backend.toArrayBuffer(backend.toPointer<void>(kindPtr), 0, kLen)
+          );
+          if (type !== "mouse") {
+            return;
+          }
+          queueMicrotask(() => {
+            handler({ kind, button, x, y, ctrl, shift, alt, scrollDir });
+          });
+        },
+        {
+          args: [
+            FFIType.ptr,
+            FFIType.u64,
+            FFIType.ptr,
+            FFIType.u64,
+            FFIType.u32,
+            FFIType.u32,
+            FFIType.u32,
+            FFIType.bool,
+            FFIType.bool,
+            FFIType.bool,
+            FFIType.u32,
+          ],
+          returns: FFIType.void,
+        }
+      );
+    },
+    setMouseCallback(
+      p: Pointer<Renderer>,
+      callbackPtr: Pointer<Renderer> | 0
+    ): void {
+      lib.symbols.setMouseCallback(p, callbackPtr);
     },
   },
 };

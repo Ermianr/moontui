@@ -110,3 +110,141 @@ test("captureSpans returns structured output", async () => {
 
   renderer.destroy();
 });
+
+test("mockMouse.click triggers mouse event", async () => {
+  const { renderer, mockMouse } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  const events: any[] = [];
+  renderer.on("mouse", (e: any) => {
+    events.push(e);
+  });
+
+  mockMouse.click(10, 5);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(events.length).toBeGreaterThanOrEqual(2);
+  expect(events[0].kind).toBe("down");
+  expect(events[0].x).toBe(10);
+  expect(events[0].y).toBe(5);
+  expect(events[1].kind).toBe("up");
+
+  renderer.destroy();
+});
+
+test("mockMouse.move triggers mouse event", async () => {
+  const { renderer, mockMouse } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  let receivedEvent: any = null;
+  renderer.on("mouse", (e: any) => {
+    receivedEvent = e;
+  });
+
+  mockMouse.move(15, 8);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(receivedEvent).not.toBeNull();
+  expect(receivedEvent.kind).toBe("move");
+
+  renderer.destroy();
+});
+
+test("mockMouse.scroll triggers scroll event", async () => {
+  const { renderer, mockMouse } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  let receivedEvent: any = null;
+  renderer.on("mouse", (e: any) => {
+    receivedEvent = e;
+  });
+
+  mockMouse.scroll(10, 5, "up");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(receivedEvent).not.toBeNull();
+  expect(receivedEvent.kind).toBe("scroll");
+  expect(receivedEvent.scroll?.direction).toBe("up");
+
+  renderer.destroy();
+});
+
+test("mockMouse.down and mockMouse.up trigger events", async () => {
+  const { renderer, mockMouse } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  const events: any[] = [];
+  renderer.on("mouse", (e: any) => {
+    events.push(e);
+  });
+
+  mockMouse.down(5, 3);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  mockMouse.up(5, 3);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(events.length).toBe(2);
+  expect(events[0].kind).toBe("down");
+  expect(events[1].kind).toBe("up");
+
+  renderer.destroy();
+});
+
+test("mockMouse.drag triggers drag sequence", async () => {
+  const { renderer, mockMouse } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  const events: any[] = [];
+  renderer.on("mouse", (e: any) => {
+    events.push(e);
+  });
+
+  mockMouse.drag(5, 5, 15, 8);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(events.length).toBeGreaterThanOrEqual(3);
+  expect(events[0].kind).toBe("down");
+  expect(events[1].kind).toBe("drag");
+  expect(events[2].kind).toBe("up");
+
+  renderer.destroy();
+});
+
+test("constructor with useMouse:true enables mouse", async () => {
+  const { renderer } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: true,
+  });
+
+  expect(renderer.useMouse).toBe(true);
+
+  renderer.destroy();
+});
+
+test("constructor with useMouse:false disables mouse", async () => {
+  const { renderer } = await createTestRenderer({
+    width: 40,
+    height: 10,
+    useMouse: false,
+  });
+
+  expect(renderer.useMouse).toBe(false);
+
+  renderer.destroy();
+});

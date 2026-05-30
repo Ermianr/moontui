@@ -55,7 +55,7 @@ test("api.events.createEventCallback creates working callback", () => {
     rendererPtr,
     callback.ptr as unknown as Pointer<Renderer>
   );
-  api.terminal.setupTerminal(rendererPtr, false);
+  api.terminal.setupTerminal(rendererPtr, false, false, false);
 
   api.renderer.destroyRenderer(rendererPtr);
   callback.close();

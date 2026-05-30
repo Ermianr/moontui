@@ -6,13 +6,23 @@ import {
   type Pointer,
   type Renderer,
 } from "./ffi";
+import {
+  buttonFromNative,
+  MouseEvent as MoonMouseEvent,
+  type MousePointerStyle,
+  type RawMouseEvent,
+  scrollDirectionFromNative,
+} from "./mouse";
 import type { FFICallbackInstance } from "./platform/types";
 
 export interface RendererOptions {
+  autoFocus?: boolean;
+  enableMouseMovement?: boolean;
   fps?: number;
   height?: number;
   test?: boolean;
   useAlternateScreen?: boolean;
+  useMouse?: boolean;
   width?: number;
 }
 
@@ -72,6 +82,7 @@ export interface FrameEvent {
 export interface RendererEvents {
   frame: [FrameEvent];
   key: [KeyEvent];
+  mouse: [MoonMouseEvent];
   resize: [ResizeEvent];
 }
 
@@ -82,15 +93,22 @@ export class CliRenderer {
   private readonly _emitter = new TypedEmitter<RendererEvents>();
   private readonly _eventCallback: FFICallbackInstance;
   private readonly _resizeCallback: FFICallbackInstance;
+  private _mouseCallback: FFICallbackInstance | null = null;
   private _cursorX = 0;
   private _cursorY = 0;
   private _cursorVisible = false;
   private _destroyed = false;
+  private _useMouse: boolean;
+  private _enableMouseMovement: boolean;
+  private _autoFocus: boolean;
 
   constructor(options: RendererOptions = {}) {
     const size = api.terminal.getTerminalSize();
     this._width = options.width ?? size.width;
     this._height = options.height ?? size.height;
+    this._useMouse = options.useMouse ?? true;
+    this._enableMouseMovement = options.enableMouseMovement ?? true;
+    this._autoFocus = options.autoFocus ?? true;
     this._ptr = api.renderer.createRenderer(
       this._width,
       this._height,
@@ -135,6 +153,47 @@ export class CliRenderer {
       this._ptr,
       this._resizeCallback.ptr as unknown as Pointer<Renderer>
     );
+
+    if (this._useMouse) {
+      this._mouseCallback = api.events.createMouseCallback(
+        (raw: {
+          kind: string;
+          button: number;
+          x: number;
+          y: number;
+          ctrl: boolean;
+          shift: boolean;
+          alt: boolean;
+          scrollDir: number;
+        }) => {
+          queueMicrotask(() => {
+            this._emitter.emit(
+              "mouse",
+              new MoonMouseEvent({
+                kind: raw.kind as RawMouseEvent["kind"],
+                button: buttonFromNative(raw.button),
+                x: raw.x,
+                y: raw.y,
+                modifiers: {
+                  ctrl: raw.ctrl,
+                  shift: raw.shift,
+                  alt: raw.alt,
+                },
+                scroll:
+                  raw.kind === "scroll"
+                    ? { direction: scrollDirectionFromNative(raw.scrollDir) }
+                    : undefined,
+              })
+            );
+          });
+        }
+      );
+
+      api.events.setMouseCallback(
+        this._ptr,
+        this._mouseCallback.ptr as unknown as Pointer<Renderer>
+      );
+    }
   }
 
   private guard(): void {
@@ -157,7 +216,9 @@ export class CliRenderer {
     this.guard();
     const result = api.terminal.setupTerminal(
       this._ptr,
-      options.useAlternateScreen ?? true
+      options.useAlternateScreen ?? true,
+      this._useMouse,
+      this._enableMouseMovement
     );
     if (result !== 0) {
       throw new Error("setupTerminal I/O error: failed to configure terminal");
@@ -177,6 +238,11 @@ export class CliRenderer {
       return;
     }
     this._destroyed = true;
+    if (this._mouseCallback) {
+      api.events.setMouseCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
+      this._mouseCallback.close();
+      this._mouseCallback = null;
+    }
     api.events.setEventCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
     this._eventCallback.close();
     api.events.setResizeCallback(this._ptr, 0 as unknown as Pointer<Renderer>);
@@ -257,5 +323,150 @@ export class CliRenderer {
   emitKeyEvent(key: string, ctrl: boolean, shift: boolean, alt: boolean): void {
     this.guard();
     this._emitter.emit("key", new KeyEvent(key, { ctrl, shift, alt }));
+  }
+
+  get useMouse(): boolean {
+    return this._useMouse;
+  }
+
+  set useMouse(value: boolean) {
+    this.guard();
+    if (value === this._useMouse) {
+      return;
+    }
+    if (value) {
+      this.enableMouse(this._enableMouseMovement);
+    } else {
+      this.disableMouse();
+    }
+    this._useMouse = value;
+  }
+
+  get enableMouseMovement(): boolean {
+    return this._enableMouseMovement;
+  }
+
+  set enableMouseMovement(value: boolean) {
+    this.guard();
+    this._enableMouseMovement = value;
+    if (this._useMouse) {
+      this.enableMouse(value);
+    }
+  }
+
+  get autoFocus(): boolean {
+    return this._autoFocus;
+  }
+
+  set autoFocus(value: boolean) {
+    this._autoFocus = value;
+  }
+
+  enableMouse(enableMovement?: boolean): void {
+    this.guard();
+    this._useMouse = true;
+    this._enableMouseMovement = enableMovement ?? true;
+    api.renderer.enableMouse(this._ptr, this._enableMouseMovement);
+  }
+
+  disableMouse(): void {
+    this.guard();
+    this._useMouse = false;
+    api.renderer.disableMouse(this._ptr);
+  }
+
+  setMousePointerStyle(style: MousePointerStyle): void {
+    this.guard();
+    const styleMap: Record<MousePointerStyle, number> = {
+      default: 0,
+      pointer: 1,
+      text: 2,
+      crosshair: 3,
+      move: 4,
+      "not-allowed": 5,
+    };
+    api.renderer.setMousePointerStyle(
+      this._ptr,
+      styleMap[style] as unknown as Pointer<void>
+    );
+  }
+
+  getMousePointerStyle(): MousePointerStyle {
+    this.guard();
+    const styleMap: Record<number, MousePointerStyle> = {
+      0: "default",
+      1: "pointer",
+      2: "text",
+      3: "crosshair",
+      4: "move",
+      5: "not-allowed",
+    };
+    const ptr = api.renderer.getMousePointerStyle(this._ptr);
+    return styleMap[Number(ptr)] ?? "default";
+  }
+
+  addToHitGrid(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    id: number
+  ): void {
+    this.guard();
+    api.renderer.hitGridAdd(this._ptr, x, y, width, height, id);
+  }
+
+  checkHit(x: number, y: number): number {
+    this.guard();
+    return api.renderer.hitGridCheckHit(this._ptr, x, y);
+  }
+
+  pushHitGridScissorRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    this.guard();
+    api.renderer.hitGridPushScissorRect(this._ptr, x, y, width, height);
+  }
+
+  popHitGridScissorRect(): void {
+    this.guard();
+    api.renderer.hitGridPopScissorRect(this._ptr);
+  }
+
+  clearHitGridScissorRects(): void {
+    this.guard();
+    api.renderer.hitGridClearScissorRects(this._ptr);
+  }
+
+  isHitGridDirty(): boolean {
+    this.guard();
+    return api.renderer.hitGridIsDirty(this._ptr);
+  }
+
+  injectMouseEvent(
+    kind: string,
+    button: number,
+    x: number,
+    y: number,
+    ctrl: boolean,
+    shift: boolean,
+    alt: boolean,
+    scrollDir: number
+  ): void {
+    this.guard();
+    api.renderer.injectMouseEvent(
+      this._ptr,
+      kind,
+      button,
+      x,
+      y,
+      ctrl,
+      shift,
+      alt,
+      scrollDir
+    );
   }
 }

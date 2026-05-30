@@ -8,15 +8,15 @@ TypeScript `CliRenderer` class that orchestrates the native rendering engine.
 
 ## Requirements
 
-1. `new CliRenderer(width, height)` calls `createRenderer(w, h)`, calls `api.createEventCallback(handler, definition)` to create the callback trampoline, and registers it via `api.setEventCallback(ptr, callback.ptr)`.
-2. `setupTerminal(options)` calls `setupTerminal(renderer, options.useAlternateScreen)`. It does NOT begin input polling.
-3. `restoreTerminal()` calls the native restore. It does NOT stop input polling (since none was started).
+1. `new CliRenderer(width, height)` calls `createRenderer(w, h)`, calls `api.createEventCallback(handler, definition)` to create the callback trampoline, and registers it via `api.setEventCallback(ptr, callback.ptr)`. When `useMouse` is true (default), it also creates a mouse callback trampoline and registers it via `api.setMouseCallback(ptr, mouseCallback.ptr)`.
+2. `setupTerminal(options)` calls `setupTerminal(renderer, options.useAlternateScreen)`. It does NOT begin input polling. When mouse is enabled, it calls `EnableMouseCapture`.
+3. `restoreTerminal()` calls the native restore. It calls `DisableMouseCapture` before raw mode is disabled. It does NOT stop input polling (since none was started).
 4. `getNextBuffer()` returns a `MoonBuffer` wrapper around the native back buffer.
 5. `processEvents()` calls `api.processEvents(ptr)` to drain and dispatch pending input events.
-6. `render()` calls `render(renderer, false)`. If a frame callback is registered, it is invoked with stats after render completes.
+6. `render()` calls `render(renderer, false)`. If a frame callback is registered, it is invoked with stats after render completes. After render, if the hit grid is dirty, `recheckHoverState()` is called.
 7. `renderForce()` calls `render(renderer, true)` to force full redraw.
-8. `destroy()` calls `api.setEventCallback(ptr, null)` to clear the Rust-side callback pointer, then `callback.close()` to release the platform callback trampoline, then `api.destroyRenderer(ptr)`.
-9. `on(event, handler)` registers event handlers for `"key"`, `"resize"`, and `"frame"`. Handlers are invoked from a `queueMicrotask` inside the JSCallback closure.
+8. `destroy()` calls `api.setEventCallback(ptr, null)` to clear the Rust-side key callback pointer, then `api.setMouseCallback(ptr, null)` to clear the mouse callback pointer, then closes both callback trampolines, then `api.destroyRenderer(ptr)`.
+9. `on(event, handler)` registers event handlers for `"key"`, `"resize"`, `"frame"`, and `"mouse"`. Handlers are invoked from a `queueMicrotask` inside the JSCallback closure.
 10. `getStats()` calls `api.getRenderStats()` which returns a typed `RenderStats` object without requiring manual `DataView` reading.
 11. `setCursorPosition(x, y, visible)` updates the native cursor state.
 12. `terminalSize()` returns `{ width, height }` from native query.
@@ -29,6 +29,9 @@ export interface RendererOptions {
   height?: number;
   useAlternateScreen?: boolean;
   fps?: number;
+  useMouse?: boolean;
+  enableMouseMovement?: boolean;
+  autoFocus?: boolean;
 }
 
 export interface RenderStats {
@@ -45,6 +48,26 @@ export class KeyEvent {
   readonly type = "key" as const;
   readonly key: string;
   readonly modifiers: { ctrl: boolean; shift: boolean; alt: boolean };
+  private _defaultPrevented = false;
+  private _propagationStopped = false;
+
+  preventDefault(): void;
+  stopPropagation(): void;
+  get defaultPrevented(): boolean;
+  get propagationStopped(): boolean;
+}
+
+export class MouseEvent {
+  readonly type: "mouse";
+  readonly kind: "down" | "up" | "drag" | "drag-end" | "drop" | "move" | "over" | "out" | "scroll";
+  readonly button: number;
+  readonly x: number;
+  readonly y: number;
+  readonly modifiers: { ctrl: boolean; shift: boolean; alt: boolean };
+  readonly scroll?: { direction: "up" | "down" | "left" | "right" };
+  readonly target: any | null;
+  readonly source?: any;
+  readonly isDragging?: boolean;
   private _defaultPrevented = false;
   private _propagationStopped = false;
 
@@ -80,10 +103,32 @@ export class CliRenderer {
   on(event: "key", handler: (e: KeyEvent) => void): void;
   on(event: "resize", handler: (e: ResizeEvent) => void): void;
   on(event: "frame", handler: (e: FrameEvent) => void): void;
-  
+  on(event: "mouse", handler: (e: MouseEvent) => void): void;
+
   getStats(): RenderStats;
   setCursorPosition(x: number, y: number, visible: boolean): void;
   terminalSize(): { width: number; height: number };
+
+  // Mouse API
+  get useMouse(): boolean;
+  set useMouse(value: boolean);
+  get enableMouseMovement(): boolean;
+  set enableMouseMovement(value: boolean);
+  get autoFocus(): boolean;
+  set autoFocus(value: boolean);
+
+  enableMouse(enableMovement?: boolean): void;
+  disableMouse(): void;
+  setMousePointerStyle(style: MousePointerStyle): void;
+  getMousePointerStyle(): MousePointerStyle;
+
+  // Hit grid API
+  addToHitGrid(x: number, y: number, width: number, height: number, id: number): void;
+  checkHit(x: number, y: number): number;
+  pushHitGridScissorRect(x: number, y: number, width: number, height: number): void;
+  popHitGridScissorRect(): void;
+  clearHitGridScissorRects(): void;
+  isHitGridDirty(): boolean;
 }
 ```
 
@@ -96,6 +141,7 @@ interface RendererEvents {
   key: [KeyEvent];
   resize: [ResizeEvent];
   frame: [FrameEvent];
+  mouse: [MouseEvent];
 }
 ```
 
@@ -105,18 +151,18 @@ interface RendererEvents {
 - **AND** `renderer._emit("frame", stats)` SHALL dispatch through the `TypedEmitter`
 
 #### Scenario: Public on overloads delegate to TypedEmitter
-- **WHEN** `renderer.on("key", handler)` is called
-- **THEN** it SHALL delegate to `this._emitter.on("key", handler)`
+- **WHEN** `renderer.on("mouse", handler)` is called
+- **THEN** it SHALL delegate to `this._emitter.on("mouse", handler)`
 - **AND** the public overloaded signatures SHALL remain unchanged
 
 #### Scenario: Wrong event data type produces compile error
-- **WHEN** `renderer._emit("key", frameEvent)` is called
+- **WHEN** `renderer._emit("mouse", frameEvent)` is called
 - **THEN** TypeScript SHALL produce a compile-time type error
 
-#### Scenario: Resize event is typed
-- **WHEN** `renderer.on("resize", (e: ResizeEvent) => void)` is called
-- **THEN** the handler SHALL receive `{ type: "resize", width: number, height: number }`
-- **AND** `renderer.on("resize", (e: KeyEvent) => void)` SHALL produce a compile-time type error
+#### Scenario: Mouse event is typed
+- **WHEN** `renderer.on("mouse", (e: MouseEvent) => void)` is called
+- **THEN** the handler SHALL receive a `MouseEvent` with `type`, `kind`, `button`, `x`, `y`, `modifiers`, `scroll`, `target`
+- **AND** `renderer.on("mouse", (e: KeyEvent) => void)` SHALL produce a compile-time type error
 
 ### Requirement: CliRenderer SHALL register resize callback in constructor
 
@@ -145,6 +191,35 @@ The `CliRenderer` constructor SHALL call `api.events.createResizeCallback(handle
 - **WHEN** `renderer.destroy()` is called
 - **THEN** `api.events.setResizeCallback(ptr, null)` SHALL be called
 - **AND** `resizeCallback.close()` SHALL be called
+
+### Requirement: CliRenderer SHALL register mouse callback in constructor
+
+The `CliRenderer` constructor SHALL call `api.events.createMouseCallback(handler)` to create a native mouse callback trampoline and register it via `api.events.setMouseCallback(ptr, callback.ptr)` when `useMouse` is true.
+
+#### Scenario: Constructor registers mouse callback
+- **WHEN** `new CliRenderer({ useMouse: true })` is called
+- **THEN** a mouse callback SHALL be registered on the native renderer
+- **AND** the callback SHALL be stored as `_mouseCallback` for cleanup in `destroy()`
+
+#### Scenario: No mouse callback when useMouse is false
+- **WHEN** `new CliRenderer({ useMouse: false })` is called
+- **THEN** no mouse callback SHALL be registered
+
+#### Scenario: Mouse callback decodes raw event data
+- **WHEN** the native mouse callback fires with (type_ptr, type_len, kind_ptr, kind_len, button, x, y, ctrl, shift, alt, scroll_dir)
+- **THEN** the strings SHALL be decoded from raw pointers
+- **AND** a `MouseEvent` instance SHALL be created and emitted via `queueMicrotask`
+
+### Requirement: CliRenderer destroy SHALL clean up mouse callback
+
+`destroy()` SHALL close the mouse callback alongside the key callback to prevent dangling FFI pointers.
+
+#### Scenario: Destroy closes both callbacks
+- **WHEN** `renderer.destroy()` is called
+- **THEN** `api.events.setMouseCallback(ptr, null)` SHALL be called
+- **AND** `mouseCallback.close()` SHALL be called
+- **AND** `api.events.setEventCallback(ptr, null)` SHALL be called
+- **AND** `eventCallback.close()` SHALL be called
 
 ## KeyEvent Class
 

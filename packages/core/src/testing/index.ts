@@ -5,6 +5,7 @@ import { CliRenderer, type RenderStats } from "../renderer";
 export interface TestRendererOptions {
   height?: number;
   kittyKeyboard?: boolean;
+  useMouse?: boolean;
   width?: number;
 }
 
@@ -13,6 +14,7 @@ export interface TestRendererSetup {
   captureSpans: () => CapturedFrame;
   getNativeStats: () => RenderStats;
   mockInput: MockKeys;
+  mockMouse: MockMouse;
   renderer: CliRenderer;
   renderOnce: () => Promise<void>;
   resize: (width: number, height: number) => void;
@@ -33,6 +35,61 @@ export interface MockKeys {
   ): void;
   pressTab(): void;
   typeText(text: string, delayMs?: number): void;
+}
+
+export interface MockMouse {
+  click(
+    x: number,
+    y: number,
+    options?: {
+      button?: "left" | "middle" | "right";
+      ctrl?: boolean;
+      shift?: boolean;
+      alt?: boolean;
+    }
+  ): void;
+  down(
+    x: number,
+    y: number,
+    options?: {
+      button?: "left" | "middle" | "right";
+      ctrl?: boolean;
+      shift?: boolean;
+      alt?: boolean;
+    }
+  ): void;
+  drag(
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    options?: {
+      button?: "left";
+      ctrl?: boolean;
+      shift?: boolean;
+      alt?: boolean;
+    }
+  ): void;
+  move(
+    x: number,
+    y: number,
+    options?: { ctrl?: boolean; shift?: boolean; alt?: boolean }
+  ): void;
+  scroll(
+    x: number,
+    y: number,
+    direction: "up" | "down" | "left" | "right"
+  ): void;
+  up(
+    x: number,
+    y: number,
+    options?: {
+      button?: "left" | "middle" | "right";
+      ctrl?: boolean;
+      shift?: boolean;
+      alt?: boolean;
+    }
+  ): void;
 }
 
 export interface Spy {
@@ -77,7 +134,12 @@ export function createTestRenderer(
   const width = options.width ?? 40;
   const height = options.height ?? 10;
 
-  const renderer = new CliRenderer({ test: true, width, height });
+  const renderer = new CliRenderer({
+    test: true,
+    width,
+    height,
+    useMouse: options.useMouse ?? true,
+  });
 
   const mockInput: MockKeys = {
     pressKey(key, modifiers = {}) {
@@ -120,9 +182,96 @@ export function createTestRenderer(
     },
   };
 
+  function buttonToNative(button?: "left" | "middle" | "right"): number {
+    switch (button) {
+      case "middle":
+        return 1;
+      case "right":
+        return 2;
+      default:
+        return 0;
+    }
+  }
+
+  function scrollDirToNative(
+    direction: "up" | "down" | "left" | "right"
+  ): number {
+    switch (direction) {
+      case "up":
+        return 1;
+      case "down":
+        return 2;
+      case "left":
+        return 3;
+      case "right":
+        return 4;
+      default:
+        return 1;
+    }
+  }
+
+  const mockMouse: MockMouse = {
+    click(x, y, options = {}) {
+      const btn = buttonToNative(options.button);
+      const ctrl = options.ctrl ?? false;
+      const shift = options.shift ?? false;
+      const alt = options.alt ?? false;
+      renderer.injectMouseEvent("down", btn, x, y, ctrl, shift, alt, 0);
+      renderer.injectMouseEvent("up", btn, x, y, ctrl, shift, alt, 0);
+    },
+
+    move(x, y, options = {}) {
+      const ctrl = options.ctrl ?? false;
+      const shift = options.shift ?? false;
+      const alt = options.alt ?? false;
+      renderer.injectMouseEvent("move", 3, x, y, ctrl, shift, alt, 0);
+    },
+
+    scroll(x, y, direction) {
+      const scrollDir = scrollDirToNative(direction);
+      renderer.injectMouseEvent(
+        "scroll",
+        3,
+        x,
+        y,
+        false,
+        false,
+        false,
+        scrollDir
+      );
+    },
+
+    down(x, y, options = {}) {
+      const btn = buttonToNative(options.button);
+      const ctrl = options.ctrl ?? false;
+      const shift = options.shift ?? false;
+      const alt = options.alt ?? false;
+      renderer.injectMouseEvent("down", btn, x, y, ctrl, shift, alt, 0);
+    },
+
+    up(x, y, options = {}) {
+      const btn = buttonToNative(options.button);
+      const ctrl = options.ctrl ?? false;
+      const shift = options.shift ?? false;
+      const alt = options.alt ?? false;
+      renderer.injectMouseEvent("up", btn, x, y, ctrl, shift, alt, 0);
+    },
+
+    drag(fromX, fromY, toX, toY, options = {}) {
+      const btn = buttonToNative(options.button ?? "left");
+      const ctrl = options.ctrl ?? false;
+      const shift = options.shift ?? false;
+      const alt = options.alt ?? false;
+      renderer.injectMouseEvent("down", btn, fromX, fromY, ctrl, shift, alt, 0);
+      renderer.injectMouseEvent("drag", btn, toX, toY, ctrl, shift, alt, 0);
+      renderer.injectMouseEvent("up", btn, toX, toY, ctrl, shift, alt, 0);
+    },
+  };
+
   return {
     renderer,
     mockInput,
+    mockMouse,
     renderOnce: () => {
       renderer.render();
       return Promise.resolve();
