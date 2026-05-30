@@ -59,3 +59,17 @@ The terminal struct SHALL store detected capabilities and provide access to them
 #### Scenario: Get capabilities
 - **WHEN** `terminal.get_capabilities()` is called
 - **THEN** it SHALL return the detected Capabilities
+
+### Requirement: Capability FFI query uses output-struct marshalling
+The terminal capability FFI query SHALL use caller-provided output memory and decode the `Capabilities` struct consistently with other native structs.
+
+#### Scenario: TypeScript capability query
+- **WHEN** TypeScript requests renderer capabilities
+- **THEN** it SHALL allocate an output buffer large enough for the native `Capabilities` struct
+- **AND** it SHALL call the native function with renderer pointer and output pointer
+- **AND** it SHALL decode `rgb`, `ansi256`, and `ansi16` from the output buffer
+
+#### Scenario: Native capability query with null output pointer
+- **WHEN** the native capability query receives a null output pointer
+- **THEN** it SHALL return without writing
+- **AND** it SHALL NOT dereference the null pointer

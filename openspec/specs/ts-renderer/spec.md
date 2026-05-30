@@ -335,3 +335,48 @@ The `CliRenderer` class SHALL call `guard()` at the start of every public method
 - `destroy()` is idempotent. Multiple calls are safe.
 - The callback is cleared on the Rust side before the platform callback is closed, preventing dangling callback pointers.
 - The renderer does not expose `bun:ffi`, `node:ffi`, or `Deno.*` types in its public interface.
+
+### Requirement: Renderer event callbacks are scheduled exactly once
+Native event callbacks SHALL cross into TypeScript through one async scheduling boundary, not nested `queueMicrotask` calls in both generated FFI and `CliRenderer`.
+
+#### Scenario: Key callback dispatch
+- **WHEN** a native key callback fires
+- **THEN** the key event handler SHALL be queued exactly once before user handlers run
+- **AND** generated FFI and `CliRenderer` SHALL NOT both queue the same event
+
+#### Scenario: Resize callback dispatch
+- **WHEN** a native resize callback fires
+- **THEN** the resize event handler SHALL be queued exactly once before user handlers run
+- **AND** internal renderer dimensions SHALL be updated before the user resize event is emitted
+
+### Requirement: Native mouse event kinds are validated
+The TypeScript renderer SHALL parse native mouse event kind strings through an explicit validator before constructing public `MouseEvent` instances.
+
+#### Scenario: Known native mouse kind
+- **WHEN** the native callback provides a supported kind string
+- **THEN** `CliRenderer` SHALL construct a `MouseEvent` with the corresponding typed kind
+
+#### Scenario: Unknown native mouse kind
+- **WHEN** the native callback provides an unsupported kind string
+- **THEN** `CliRenderer` SHALL drop the event or surface a clear error according to the documented policy
+- **AND** it SHALL NOT cast the string into `RawMouseEvent["kind"]`
+
+### Requirement: Constructor options are effective or removed
+Public `RendererOptions` fields SHALL either affect renderer behavior or be removed from the public type.
+
+#### Scenario: useAlternateScreen is configured in constructor
+- **WHEN** `new CliRenderer({ useAlternateScreen: false })` is created and `setupTerminal()` is called without an override
+- **THEN** setup SHALL use the constructor value
+- **OR** `useAlternateScreen` SHALL not be present in `RendererOptions`
+
+### Requirement: Current buffer wrapper is read-only
+The TypeScript API SHALL prevent drawing through a buffer returned by `getCurrentBuffer()`.
+
+#### Scenario: Current buffer has no mutating methods
+- **WHEN** TypeScript code calls `renderer.getCurrentBuffer()`
+- **THEN** the returned wrapper SHALL expose inspection methods only
+- **AND** it SHALL NOT expose `clear`, `drawText`, `drawChar`, `drawBox`, or `fillRect`
+
+#### Scenario: Next buffer remains drawable
+- **WHEN** TypeScript code calls `renderer.getNextBuffer()`
+- **THEN** the returned wrapper SHALL expose drawing methods for the next frame

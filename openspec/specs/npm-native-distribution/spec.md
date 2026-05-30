@@ -38,3 +38,29 @@ The distribution mechanism SHALL NOT rely on `postinstall`, `preinstall`, or any
 #### Scenario: Installing in a restricted environment
 - **WHEN** a user installs `@moontui/core` with `--ignore-scripts` or in an environment that blocks lifecycle scripts
 - **THEN** the native binary SHALL still be available because it was installed as an `optionalDependency`
+
+### Requirement: Platform artifacts are stored under platform-specific paths
+Native build artifacts used for package generation SHALL be stored or referenced using platform-specific directories or filenames so architectures with the same binary filename cannot overwrite or reuse each other.
+
+#### Scenario: Darwin artifacts for both architectures
+- **WHEN** packages are generated for `darwin-x64` and `darwin-arm64`
+- **THEN** each package SHALL read its binary from a distinct platform-specific path
+- **AND** both packages SHALL NOT read the same `native/libmoontui_core.dylib` file
+
+#### Scenario: Linux artifacts for both architectures
+- **WHEN** packages are generated for `linux-x64` and `linux-arm64`
+- **THEN** each package SHALL read its binary from a distinct platform-specific path
+- **AND** both packages SHALL NOT read the same `native/libmoontui_core.so` file
+
+### Requirement: All-platform package generation fails on missing required artifacts
+The all-platform package generation command SHALL fail when required platform artifacts are missing unless a separate explicitly named package-existing command is used.
+
+#### Scenario: Required artifact missing
+- **WHEN** all-platform package generation runs and a supported platform artifact is absent
+- **THEN** the command SHALL exit non-zero
+- **AND** it SHALL identify the missing platform artifact
+
+#### Scenario: Host native build remains simple
+- **WHEN** a developer runs the host native build command
+- **THEN** it SHALL build the host Rust artifact
+- **AND** it SHALL copy it into the host platform-specific native artifact path

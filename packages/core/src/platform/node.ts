@@ -1,12 +1,23 @@
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./shared";
 import type { PlatformBackend, Pointer } from "./types";
 
-export function createNodeBackend(): PlatformBackend {
-  // biome-ignore lint/suspicious/noExplicitAny: node:ffi is experimental and may not be available
-  // biome-ignore lint/correctness/noUnresolvedImports: node:ffi is a Node.js runtime built-in
-  const nodeFfi = require("node:ffi") as any;
-
+export function createNodeBackend(nodeFfi: unknown): PlatformBackend {
+  const ffi = nodeFfi as {
+    dlopen(
+      path: string,
+      defs: unknown
+    ): {
+      symbols: Record<string, (...args: unknown[]) => unknown>;
+      close(): void;
+    };
+    ptr(view: ArrayBufferView): unknown;
+    registerCallback(
+      fn: (...args: unknown[]) => unknown,
+      options: unknown
+    ): { ptr: unknown; close(): void };
+  };
   return createBackend({
     typeMap: {
       i8: "i8",
@@ -26,7 +37,23 @@ export function createNodeBackend(): PlatformBackend {
       usize: "u64",
     },
     ptr(view) {
-      return nodeFfi.ptr(view) as unknown as Pointer<void>;
+      return ffi.ptr(view) as unknown as Pointer<void>;
+    },
+    resolveLibraryPath() {
+      const platform = process.platform;
+      const arch = process.arch;
+      const packageName = `@moontui/core-${platform}-${arch}`;
+      try {
+        const resolved = import.meta.resolve(`${packageName}/index.js`);
+        return join(
+          dirname(fileURLToPath(new URL(resolved))),
+          libraryName(platform)
+        );
+      } catch {
+        throw new Error(
+          `moontui native package is unavailable for Node.js on ${platform}-${arch}. Node.js support is experimental.`
+        );
+      }
     },
     toArrayBuffer(_ptr, _offset, _length) {
       throw new Error("toArrayBuffer is not yet supported in Node.js backend");
@@ -43,10 +70,10 @@ export function createNodeBackend(): PlatformBackend {
       return fileURLToPath(new URL(url));
     },
     dlopen(path, defs) {
-      return nodeFfi.dlopen(path, defs);
+      return ffi.dlopen(path, defs);
     },
     createCallbackImpl(fn, args, returns) {
-      const cb = nodeFfi.registerCallback(fn, { args, returns });
+      const cb = ffi.registerCallback(fn, { args, returns });
       return {
         ptr: cb.ptr as unknown as Pointer<void>,
         close() {
@@ -55,4 +82,17 @@ export function createNodeBackend(): PlatformBackend {
       };
     },
   });
+}
+
+function libraryName(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "win32":
+      return "moontui_core.dll";
+    case "darwin":
+      return "libmoontui_core.dylib";
+    case "linux":
+      return "libmoontui_core.so";
+    default:
+      throw new Error(`Unsupported platform: ${platform}`);
+  }
 }

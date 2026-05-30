@@ -1,4 +1,9 @@
-import { api, type Buffer as FfiBuffer, type Pointer } from "./ffi";
+import {
+  api,
+  type Buffer as FfiBuffer,
+  type MutablePointer,
+  type ReadonlyPointer,
+} from "./ffi";
 import { backend } from "./platform/index";
 import { RGBA, type RGBAInput, terminalDefault } from "./rgba";
 
@@ -52,18 +57,27 @@ const DEFAULT_BORDER_CHARS = new Uint32Array([
   cp("│"),
 ]);
 
+const BORDER_TOP = 1;
+const BORDER_RIGHT = 1 << 1;
+const BORDER_BOTTOM = 1 << 2;
+const BORDER_LEFT = 1 << 3;
+
 export class MoonBuffer {
   readonly width: number;
   readonly height: number;
-  private readonly _ptr: Pointer<FfiBuffer>;
+  private readonly _ptr: MutablePointer<FfiBuffer>;
 
-  constructor(bufferPtr: Pointer<FfiBuffer>, width: number, height: number) {
+  constructor(
+    bufferPtr: MutablePointer<FfiBuffer>,
+    width: number,
+    height: number
+  ) {
     this._ptr = bufferPtr;
     this.width = width;
     this.height = height;
   }
 
-  get ptr(): Pointer<FfiBuffer> {
+  get ptr(): MutablePointer<FfiBuffer> {
     return this._ptr;
   }
 
@@ -125,7 +139,7 @@ export class MoonBuffer {
       width,
       height,
       DEFAULT_BORDER_CHARS,
-      0,
+      packBorderOptions(options.border),
       borderColor,
       backgroundColor
     );
@@ -260,5 +274,60 @@ export class MoonBuffer {
     }
 
     return lines;
+  }
+}
+
+function packBorderOptions(border: DrawBoxOptions["border"]): number {
+  if (border === false) {
+    return 1 << 4;
+  }
+  if (Array.isArray(border)) {
+    return border.reduce((flags, side) => {
+      switch (side) {
+        case "top":
+          return flags | BORDER_TOP;
+        case "right":
+          return flags | BORDER_RIGHT;
+        case "bottom":
+          return flags | BORDER_BOTTOM;
+        case "left":
+          return flags | BORDER_LEFT;
+        default:
+          return flags;
+      }
+    }, 0);
+  }
+  return BORDER_TOP | BORDER_RIGHT | BORDER_BOTTOM | BORDER_LEFT;
+}
+
+export class ReadonlyMoonBuffer {
+  readonly width: number;
+  readonly height: number;
+  private readonly _buffer: MoonBuffer;
+
+  constructor(
+    bufferPtr: ReadonlyPointer<FfiBuffer>,
+    width: number,
+    height: number
+  ) {
+    this.width = width;
+    this.height = height;
+    this._buffer = new MoonBuffer(
+      bufferPtr as unknown as MutablePointer<FfiBuffer>,
+      width,
+      height
+    );
+  }
+
+  get ptr(): ReadonlyPointer<FfiBuffer> {
+    return this._buffer.ptr as unknown as ReadonlyPointer<FfiBuffer>;
+  }
+
+  getRealCharBytes(addLineBreaks = true): Uint8Array {
+    return this._buffer.getRealCharBytes(addLineBreaks);
+  }
+
+  getSpanLines(): CapturedLine[] {
+    return this._buffer.getSpanLines();
   }
 }

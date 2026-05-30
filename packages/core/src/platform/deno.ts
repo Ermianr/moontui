@@ -26,6 +26,13 @@ export function createDenoBackend(): PlatformBackend {
     ptr(view) {
       return DenoFfi.UnsafePointer.of(view) as unknown as Pointer<void>;
     },
+    resolveLibraryPath() {
+      const build = DenoFfi.build as { arch: string; os: string } | undefined;
+      const platform = build ? `${build.os}-${build.arch}` : "unknown-platform";
+      throw new Error(
+        `moontui native package resolution is unavailable for Deno on ${platform}. Deno support is experimental.`
+      );
+    },
     toArrayBuffer(ptr, offset, length) {
       const buf = new DenoFfi.UnsafePointerView(
         ptr as unknown as bigint

@@ -30,10 +30,10 @@
     "lint:ts": "ultracite check",
     "check": "cargo fmt --all -- --check && ultracite check && cargo clippy --workspace --all-targets -- --deny warnings && ultracite check",
     "typecheck": "bun run --cwd packages/core typecheck",
-    "clean": "rm -rf target/ packages/core/dist/ packages/core/native/",
+    "clean": "bun scripts/clean.ts",
     "prepare-release": "bun scripts/prepare-release.ts",
     "pre-publish": "bun scripts/pre-publish.ts",
-    "publish": "bun run --cwd packages/core publish",
+    "publish": "bun run pre-publish && bun packages/core/scripts/publish.ts",
     "prepare": "husky"
   },
   "devDependencies": {

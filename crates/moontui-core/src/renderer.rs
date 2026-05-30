@@ -58,11 +58,13 @@ pub struct CliRenderer {
   mouse_motion_enabled: bool,
   mouse_pointer_style: MousePointerStyle,
   hit_grid: HitGrid,
+  resize_render_failed: bool,
 }
 
 #[moontui_export]
 impl CliRenderer {
   pub fn new(width: u32, height: u32, output: OutputSink) -> Self {
+    let (width, height) = validate_dimensions(width, height);
     let caps = crate::terminal::detect_capabilities();
     Self {
       front_buffer: OptimizedBuffer::new(width, height),
@@ -81,6 +83,7 @@ impl CliRenderer {
       mouse_motion_enabled: false,
       mouse_pointer_style: MousePointerStyle::Default,
       hit_grid: HitGrid::new(width, height),
+      resize_render_failed: false,
     }
   }
 
@@ -107,9 +110,8 @@ impl CliRenderer {
     enable_mouse: bool,
     enable_mouse_movement: bool,
   ) -> io::Result<()> {
-    if crate::terminal::init_raw_mode().is_ok() {
-      self.raw_mode_enabled = true;
-    }
+    crate::terminal::init_raw_mode().map_err(io::Error::other)?;
+    self.raw_mode_enabled = true;
     let mut buf = Vec::new();
     ansi::write_reset(&mut buf);
     if use_alternate_screen {
@@ -197,7 +199,7 @@ impl CliRenderer {
     let render_time_us = ansi_done.duration_since(render_start).as_micros() as f64;
 
     let write_start = Instant::now();
-    let write_result = self.output.write_all(&output).and_then(|()| self.output.flush());
+    self.output.write_all(&output).and_then(|()| self.output.flush())?;
     let write_time_us = write_start.elapsed().as_micros() as f64;
 
     std::mem::swap(&mut self.front_buffer, &mut self.back_buffer);
@@ -205,20 +207,30 @@ impl CliRenderer {
 
     self.stats.record_frame(cells_updated, render_time_us, write_time_us);
 
-    write_result
+    Ok(())
   }
 
   pub fn process_events(&mut self) -> usize {
+    self.resize_render_failed = false;
     let count = self.event_bridge.process_events();
     if let Some((w, h)) = self.event_bridge.take_pending_resize() {
       self.resize(w, h);
       self.front_buffer.clear(&color::default_color(0, 0, 0, 255));
-      let _ = self.render(true);
+      if self.render(true).is_err() {
+        self.resize_render_failed = true;
+        return usize::MAX;
+      }
     }
     count
   }
 
+  #[moontui_skip]
+  pub fn take_resize_render_failed(&mut self) -> bool {
+    std::mem::take(&mut self.resize_render_failed)
+  }
+
   pub fn resize(&mut self, width: u32, height: u32) {
+    let (width, height) = validate_dimensions(width, height);
     self.front_buffer = OptimizedBuffer::new(width, height);
     self.back_buffer = OptimizedBuffer::new(width, height);
     self.width = width;
@@ -366,11 +378,11 @@ impl CliRenderer {
   }
 
   #[moontui_skip]
-  pub fn inject_resize_event(&mut self, width: u32, height: u32) {
+  pub fn inject_resize_event(&mut self, width: u32, height: u32) -> io::Result<()> {
     self.event_bridge.inject_resize_event(width, height);
     self.resize(width, height);
     self.front_buffer.clear(&color::default_color(0, 0, 0, 255));
-    let _ = self.render(true);
+    self.render(true)
   }
 
   #[moontui_skip]
@@ -387,6 +399,13 @@ impl CliRenderer {
   ) {
     self.event_bridge.inject_mouse_event(kind, button, x, y, ctrl, shift, alt, scroll_dir);
   }
+}
+
+fn validate_dimensions(width: u32, height: u32) -> (u32, u32) {
+  if (width as usize).checked_mul(height as usize).is_some() {
+    return (width, height);
+  }
+  (0, 0)
 }
 
 #[cfg(test)]
@@ -409,6 +428,19 @@ mod tests {
     renderer.back_buffer.draw_char('X' as u32, 2, 2, &fg, &bg, 0);
     renderer.render(false).unwrap();
     assert_eq!(renderer.stats.cells_updated, 1);
+  }
+
+  #[test]
+  fn failed_render_should_not_commit_frame_state() {
+    let mut renderer = CliRenderer::new(2, 2, OutputSink::Failing);
+    let fg = color::rgb_color(255, 255, 255, 255);
+    let bg = color::rgb_color(0, 0, 0, 255);
+    renderer.back_buffer.draw_char('X' as u32, 0, 0, &fg, &bg, 0);
+
+    assert!(renderer.render(false).is_err());
+    assert_eq!(renderer.front_buffer.cell_char(0), 0);
+    assert_eq!(renderer.back_buffer.cell_char(0), 'X' as u32);
+    assert_eq!(renderer.stats.frame_count, 0);
   }
 
   #[test]

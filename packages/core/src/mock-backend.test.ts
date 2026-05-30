@@ -30,6 +30,10 @@ function createMockBackend(): PlatformBackend & { calls: string[] } {
       calls.push(`toPointer(${value})`);
       return value as unknown as Pointer<T>;
     },
+    resolveLibraryPath(): string {
+      calls.push("resolveLibraryPath");
+      return "test.dll";
+    },
     resolveURL(url: string): string {
       calls.push(`resolveURL(${url})`);
       return url.replace("file://", "");

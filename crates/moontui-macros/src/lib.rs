@@ -10,7 +10,7 @@ use syn::{
 };
 
 mod schema;
-use schema::{FieldDef, FunctionDef, ParamDef, Schema, StructDef};
+use schema::{CallbackDef, FieldDef, FunctionDef, ParamDef, Schema, StructDef};
 
 mod codegen;
 use codegen::generate_wrapper;
@@ -148,6 +148,7 @@ fn generate_export(
       name: "self_ptr".to_string(),
       r#type: "ptr".to_string(),
       role: "self".to_string(),
+      pointer_mutability: None,
     });
 
     for arg in &sig.inputs {
@@ -156,14 +157,15 @@ fn generate_export(
           syn::Pat::Ident(id) => id.ident.to_string(),
           _ => "arg".to_string(),
         };
-        let ty = type_to_ffi(&pat_type.ty);
-        params.push(ParamDef { name, r#type: ty, role: "arg".to_string() });
+        let ty = type_to_ffi(&pat_type.ty)?;
+        let pointer_mutability = pointer_mutability(&pat_type.ty);
+        params.push(ParamDef { name, r#type: ty, role: "arg".to_string(), pointer_mutability });
       }
     }
 
     let returns = match &sig.output {
       ReturnType::Default => "void".to_string(),
-      ReturnType::Type(_, ty) => type_to_ffi(ty),
+      ReturnType::Type(_, ty) => type_to_ffi(ty)?,
     };
 
     // Check for @ffi_manual doc comments on methods
@@ -176,17 +178,20 @@ fn generate_export(
     };
 
     let fn_def = FunctionDef {
+      rust_name: method_name,
       receiver: Some(self_type.clone()),
       params,
       returns,
       ffi_name: ffi_name.clone(),
+      api_group: api_group(Some(&self_type), &ffi_name).to_string(),
       manual: is_manual,
+      output_struct: output_struct_for(&ffi_name),
       ts_body: ts_metadata.ts_body,
       ts_args: ts_metadata.ts_args,
       ts_returns: ts_metadata.ts_returns,
     };
 
-    schema.functions.insert(sig.ident.to_string(), fn_def);
+    insert_function(&mut schema, &ffi_name, fn_def, sig.ident.span())?;
 
     let wrapper = generate_wrapper(&self_type, sig, &ffi_name);
     wrappers.push(wrapper);
@@ -225,10 +230,10 @@ fn generate_struct_export(item_struct: &ItemStruct) -> syn::Result<proc_macro2::
 
   // For #[repr(C)], the total size is the offset after the last field plus padding
   // We need the actual alignment of the struct (max field alignment)
-  let max_alignment = fields.iter().fold(1usize, |acc, f| {
-    let (_, _, align) = struct_field_info_by_type(&f.r#type);
-    acc.max(align)
-  });
+  let max_alignment = fields.iter().try_fold(1usize, |acc, f| {
+    let (_, _, align) = struct_field_info_by_type(&f.r#type)?;
+    Ok::<usize, syn::Error>(acc.max(align))
+  })?;
   let total_size = (offset + max_alignment - 1) & !(max_alignment - 1);
 
   let struct_def =
@@ -245,21 +250,26 @@ fn struct_field_info(ty: &Type) -> syn::Result<(String, usize, usize)> {
   match ty {
     Type::Path(tp) => {
       let name = tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
-      Ok(struct_field_info_by_type(&name))
+      struct_field_info_by_type(&name)
     }
     _ => Err(syn::Error::new(ty.span(), "unsupported field type for struct export")),
   }
 }
 
-fn struct_field_info_by_type(type_name: &str) -> (String, usize, usize) {
+fn struct_field_info_by_type(type_name: &str) -> syn::Result<(String, usize, usize)> {
   match type_name {
-    "bool" => ("bool".to_string(), 1, 1),
-    "u8" => ("u8".to_string(), 1, 1),
-    "i8" => ("i8".to_string(), 1, 1),
-    "u16" => ("u16".to_string(), 2, 2),
-    "i16" => ("i16".to_string(), 2, 2),
-    "u32" | "MousePointerStyle" => ("u32".to_string(), 4, 4),
-    _ => ("ptr".to_string(), std::mem::size_of::<*const ()>(), std::mem::align_of::<*const ()>()),
+    "bool" => Ok(("bool".to_string(), 1, 1)),
+    "u8" => Ok(("u8".to_string(), 1, 1)),
+    "i8" => Ok(("i8".to_string(), 1, 1)),
+    "u16" => Ok(("u16".to_string(), 2, 2)),
+    "i16" => Ok(("i16".to_string(), 2, 2)),
+    "u32" | "MousePointerStyle" => Ok(("u32".to_string(), 4, 4)),
+    "i32" => Ok(("i32".to_string(), 4, 4)),
+    "u64" | "usize" => Ok(("u64".to_string(), 8, 8)),
+    "i64" => Ok(("i64".to_string(), 8, 8)),
+    "f32" => Ok(("f32".to_string(), 4, 4)),
+    "f64" => Ok(("f64".to_string(), 8, 8)),
+    _ => Err(syn::Error::new(Span::call_site(), format!("unsupported FFI type `{type_name}`"))),
   }
 }
 
@@ -280,28 +290,32 @@ fn generate_manual_export(func: &ItemFn) -> syn::Result<proc_macro2::TokenStream
         syn::Pat::Ident(id) => id.ident.to_string(),
         _ => "arg".to_string(),
       };
-      let ty = type_to_ffi(&pat_type.ty);
-      params.push(ParamDef { name, r#type: ty, role: "arg".to_string() });
+      let ty = type_to_ffi(&pat_type.ty)?;
+      let pointer_mutability = pointer_mutability(&pat_type.ty);
+      params.push(ParamDef { name, r#type: ty, role: "arg".to_string(), pointer_mutability });
     }
   }
 
   let returns = match &func.sig.output {
     ReturnType::Default => "void".to_string(),
-    ReturnType::Type(_, ty) => type_to_ffi(ty),
+    ReturnType::Type(_, ty) => type_to_ffi(ty)?,
   };
 
   let fn_def = FunctionDef {
+    rust_name: fn_name.clone(),
     receiver: None,
     params,
     returns,
     ffi_name: fn_name.clone(),
+    api_group: api_group(None, &fn_name).to_string(),
     manual: true,
+    output_struct: output_struct_for(&fn_name),
     ts_body: ts_metadata.ts_body,
     ts_args: ts_metadata.ts_args,
     ts_returns: ts_metadata.ts_returns,
   };
 
-  schema.functions.insert(fn_name, fn_def);
+  insert_function(&mut schema, &fn_name, fn_def, func.sig.ident.span())?;
   save_schema(&schema)?;
 
   // Output the function unchanged
@@ -355,14 +369,59 @@ fn has_skip_attribute(attrs: &[syn::Attribute]) -> bool {
   attrs.iter().any(|attr| attr.path().is_ident("moontui_skip"))
 }
 
-fn type_to_ffi(ty: &Type) -> String {
+fn type_to_ffi(ty: &Type) -> syn::Result<String> {
   match ty {
     Type::Path(tp) => {
       let name = tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
-      struct_field_info_by_type(&name).0
+      if name == "Option" {
+        return Ok("ptr".to_string());
+      }
+      struct_field_info_by_type(&name).map(|(ffi_type, _, _)| ffi_type)
     }
-    _ => "ptr".to_string(),
+    Type::Reference(_) | Type::Ptr(_) => Ok("ptr".to_string()),
+    _ => Err(syn::Error::new(ty.span(), "unsupported FFI type")),
   }
+}
+
+fn pointer_mutability(ty: &Type) -> Option<String> {
+  match ty {
+    Type::Ptr(ptr) if ptr.mutability.is_some() => Some("mutable".to_string()),
+    Type::Ptr(_) | Type::Reference(_) => Some("readonly".to_string()),
+    _ => None,
+  }
+}
+
+fn api_group(receiver: Option<&str>, ffi_name: &str) -> &'static str {
+  match receiver {
+    Some("OptimizedBuffer") => "buffer",
+    Some("CliRenderer") => "renderer",
+    _ if ffi_name.starts_with("buffer") => "buffer",
+    _ if matches!(ffi_name, "setupTerminal" | "restoreTerminal" | "getTerminalSize") => "terminal",
+    _ => "renderer",
+  }
+}
+
+fn output_struct_for(ffi_name: &str) -> Option<String> {
+  match ffi_name {
+    "getCapabilities" => Some("Capabilities".to_string()),
+    "getRenderStats" => Some("FrameStats".to_string()),
+    _ => None,
+  }
+}
+
+fn insert_function(
+  schema: &mut Schema,
+  ffi_name: &str,
+  fn_def: FunctionDef,
+  span: Span,
+) -> syn::Result<()> {
+  if let Some(existing) = schema.functions.get(ffi_name)
+    && (existing.rust_name != fn_def.rust_name || existing.receiver != fn_def.receiver)
+  {
+    return Err(syn::Error::new(span, format!("duplicate FFI export `{ffi_name}`")));
+  }
+  schema.functions.insert(ffi_name.to_string(), fn_def);
+  Ok(())
 }
 
 fn schema_path() -> PathBuf {
@@ -387,11 +446,63 @@ fn load_schema() -> Schema {
 }
 
 fn save_schema(schema: &Schema) -> syn::Result<()> {
+  let mut schema = schema.clone();
   let path = schema_path();
-  let json = serde_json::to_string_pretty(schema)
+  if path.exists() {
+    let data = fs::read_to_string(&path).unwrap_or_default();
+    if let Ok(existing) = serde_json::from_str::<Schema>(&data) {
+      for (name, function) in existing.functions {
+        schema.functions.entry(name).or_insert(function);
+      }
+      for (name, struct_def) in existing.structs {
+        schema.structs.entry(name).or_insert(struct_def);
+      }
+      for (name, callback) in existing.callbacks {
+        schema.callbacks.entry(name).or_insert(callback);
+      }
+    }
+  }
+  ensure_schema_metadata(&mut schema);
+  let json = serde_json::to_string_pretty(&schema)
     .map_err(|e| syn::Error::new(Span::call_site(), e.to_string()))?;
   fs::write(&path, json).map_err(|e| syn::Error::new(Span::call_site(), e.to_string()))?;
   Ok(())
+}
+
+fn ensure_schema_metadata(schema: &mut Schema) {
+  if !schema.callbacks.is_empty() {
+    return;
+  }
+  schema.callbacks.insert(
+    "event".to_string(),
+    CallbackDef {
+      name: "EventCallback".to_string(),
+      ffi_args: vec!["ptr".to_string(), "u64".to_string(), "ptr".to_string(), "u64".to_string(), "bool".to_string(), "bool".to_string(), "bool".to_string()],
+      handler_params: "typePtr: number, typeLen: bigint, keyPtr: number, keyLen: bigint, ctrl: boolean, shift: boolean, alt: boolean".to_string(),
+      handler_body: "const tLen = Number(typeLen)\nconst kLen = Number(keyLen)\nif (!typePtr || tLen === 0 || !keyPtr || kLen === 0) { return }\nconst type = decodeStringPointer(typePtr, tLen)\nconst key = decodeStringPointer(keyPtr, kLen)\nif (type !== \"key\") { return }\nhandler({ key, ctrl, shift, alt })".to_string(),
+      handler_type: "(event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => void".to_string(),
+    },
+  );
+  schema.callbacks.insert(
+    "resize".to_string(),
+    CallbackDef {
+      name: "ResizeCallback".to_string(),
+      ffi_args: vec!["u32".to_string(), "u32".to_string()],
+      handler_params: "width: number, height: number".to_string(),
+      handler_body: "handler({ width, height })".to_string(),
+      handler_type: "(event: { width: number; height: number }) => void".to_string(),
+    },
+  );
+  schema.callbacks.insert(
+    "mouse".to_string(),
+    CallbackDef {
+      name: "MouseCallback".to_string(),
+      ffi_args: vec!["ptr".to_string(), "u64".to_string(), "ptr".to_string(), "u64".to_string(), "u32".to_string(), "u32".to_string(), "u32".to_string(), "bool".to_string(), "bool".to_string(), "bool".to_string(), "u32".to_string()],
+      handler_params: "typePtr: number, typeLen: bigint, kindPtr: number, kindLen: bigint, button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number".to_string(),
+      handler_body: "const tLen = Number(typeLen)\nconst kLen = Number(kindLen)\nif (!typePtr || tLen === 0 || !kindPtr || kLen === 0) { return }\nconst type = decodeStringPointer(typePtr, tLen)\nconst kind = decodeStringPointer(kindPtr, kLen)\nif (type !== \"mouse\") { return }\nhandler({ kind, button, x, y, ctrl, shift, alt, scrollDir })".to_string(),
+      handler_type: "(event: { kind: string; button: number; x: number; y: number; ctrl: boolean; shift: boolean; alt: boolean; scrollDir: number }) => void".to_string(),
+    },
+  );
 }
 
 fn capitalize_first(s: &str) -> String {

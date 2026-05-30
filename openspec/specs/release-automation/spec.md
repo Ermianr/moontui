@@ -60,3 +60,36 @@ The release workflow (`.github/workflows/release.yml`) SHALL run the test suite 
 - **THEN** it SHALL run on `ubuntu-latest`
 - **AND** it SHALL install Rust and Bun toolchains
 - **AND** it SHALL install dependencies with `bun install`
+
+### Requirement: Package publish script uses the platform-aware publisher
+The package publish script for `@moontui/core` SHALL invoke the repository's platform-aware publish script rather than plain `bun publish` from the source package directory.
+
+#### Scenario: Root publish command
+- **WHEN** `bun run publish` is executed from the repository root
+- **THEN** it SHALL run pre-publish validation
+- **AND** it SHALL publish platform packages before the main package through `packages/core/scripts/publish.ts`
+
+#### Scenario: Core package publish command
+- **WHEN** `bun run publish` is executed from `packages/core`
+- **THEN** it SHALL publish from generated package directories and `dist/`
+- **AND** it SHALL NOT publish the source `packages/core/package.json` directly
+
+### Requirement: Release prep only bumps publishable versioned packages
+Release preparation SHALL only update packages that are intended to be published and already declare a valid semver `version`.
+
+#### Scenario: Private example package
+- **WHEN** release prep scans `examples/hello/package.json` or `examples/dashboard/package.json`
+- **THEN** it SHALL skip the package because it is private
+- **AND** it SHALL NOT update its version field
+
+#### Scenario: Private config package without version
+- **WHEN** release prep scans `packages/config/package.json`
+- **THEN** it SHALL skip the package because it is private and has no version
+- **AND** it SHALL NOT crash trying to bump an undefined version
+
+### Requirement: Cleanup script is portable across supported development hosts
+Repository cleanup SHALL use a Bun or Node script rather than shell-specific `rm -rf`.
+
+#### Scenario: Cleanup on Windows
+- **WHEN** `bun run clean` is executed on Windows
+- **THEN** it SHALL remove build artifacts without requiring a Unix shell

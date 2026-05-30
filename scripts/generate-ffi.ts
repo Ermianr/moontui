@@ -1,26 +1,59 @@
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, join, relative } from "node:path";
 
 interface SchemaParam {
   name: string;
+  pointer_mutability?: "mutable" | "readonly";
   role: string;
   type: string;
 }
 
+interface SchemaStructField {
+  name: string;
+  offset: number;
+  type: string;
+}
+
+interface SchemaStruct {
+  alignment: number;
+  fields: SchemaStructField[];
+  repr: string;
+  size: number;
+}
+
+interface SchemaCallback {
+  ffi_args: string[];
+  handler_body: string;
+  handler_params: string;
+  handler_type: string;
+  name: string;
+}
+
 interface SchemaFunction {
+  api_group: "buffer" | "renderer" | "terminal";
   ffi_name: string;
   manual?: boolean;
+  output_struct?: string;
   params: SchemaParam[];
   receiver: string | null;
   returns: string;
+  rust_name: string;
   ts_args?: string;
   ts_body?: string;
   ts_returns?: string;
 }
 
 interface Schema {
+  callbacks?: Record<string, SchemaCallback>;
   functions: Record<string, SchemaFunction>;
+  structs?: Record<string, SchemaStruct>;
 }
 
 const FFI_TYPE_MAP: Record<string, string> = {
@@ -33,6 +66,7 @@ const FFI_TYPE_MAP: Record<string, string> = {
   u32: "FFIType.u32",
   i32: "FFIType.i32",
   u64: "FFIType.u64",
+  usize: "FFIType.u64",
   i64: "FFIType.i64",
   f32: "FFIType.f32",
   f64: "FFIType.f64",
@@ -48,8 +82,9 @@ const TS_TYPE_MAP: Record<string, string> = {
   i16: "number",
   u32: "number",
   i32: "number",
-  u64: "number",
-  i64: "number",
+  u64: "bigint",
+  usize: "bigint",
+  i64: "bigint",
   f32: "number",
   f64: "number",
   ptr: "Pointer<void>",
@@ -75,93 +110,24 @@ function resolveTsType(type: string, context: string): string {
   return mapped;
 }
 
-interface CallbackDescriptor {
-  ffiArgs: string[];
-  handlerBody: string;
-  handlerParams: string;
-  typeGuard: string;
-  typeScriptHandlerType: string;
-}
-
-function emitCallbackFactory(desc: CallbackDescriptor, indent: string): string {
+function emitCallbackFactory(desc: SchemaCallback, indent: string): string {
   let content = "";
-  content += `${indent}  handler: ${desc.typeScriptHandlerType}\n`;
+  content += `${indent}  handler: ${desc.handler_type}\n`;
   content += `${indent}): import("./platform/types").FFICallbackInstance {\n`;
   content += `${indent}  return lib.createCallback(\n`;
-  content += `${indent}    (${desc.handlerParams}) => {\n`;
-  for (const line of desc.handlerBody.split("\n")) {
+  content += `${indent}    (${desc.handler_params}) => {\n`;
+  for (const line of desc.handler_body.split("\n")) {
     content += `${indent}      ${line}\n`;
   }
   content += `${indent}    },\n`;
-  content += `${indent}    { args: [${desc.ffiArgs.join(", ")}], returns: FFIType.void }\n`;
+  const ffiArgs = desc.ffi_args.map((type) =>
+    resolveFfiType(type, `${desc.name}:callback`)
+  );
+  content += `${indent}    { args: [${ffiArgs.join(", ")}], returns: FFIType.void }\n`;
   content += `${indent}  )\n`;
   content += `${indent}},\n`;
   return content;
 }
-
-const EVENT_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
-  ffiArgs: [
-    "FFIType.ptr",
-    "FFIType.u64",
-    "FFIType.ptr",
-    "FFIType.u64",
-    "FFIType.bool",
-    "FFIType.bool",
-    "FFIType.bool",
-  ],
-  handlerParams:
-    "typePtr: number, typeLen: bigint, keyPtr: number, keyLen: bigint,\n" +
-    "          ctrl: boolean, shift: boolean, alt: boolean",
-  handlerBody:
-    "const tLen = Number(typeLen)\n" +
-    "const kLen = Number(keyLen)\n" +
-    "if (!typePtr || tLen === 0 || !keyPtr || kLen === 0) { return }\n" +
-    "const type = decodeStringPointer(typePtr, tLen)\n" +
-    "const key = decodeStringPointer(keyPtr, kLen)\n" +
-    'if (type !== "key") { return }\n' +
-    "queueMicrotask(() => { handler({ key, ctrl, shift, alt }) })",
-  typeGuard: "type",
-  typeScriptHandlerType:
-    "(event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => void",
-};
-
-const RESIZE_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
-  ffiArgs: ["FFIType.u32", "FFIType.u32"],
-  handlerParams: "width: number, height: number",
-  handlerBody: "queueMicrotask(() => { handler({ width, height }) })",
-  typeGuard: "",
-  typeScriptHandlerType: "(event: { width: number; height: number }) => void",
-};
-
-const MOUSE_CALLBACK_DESCRIPTOR: CallbackDescriptor = {
-  ffiArgs: [
-    "FFIType.ptr",
-    "FFIType.u64",
-    "FFIType.ptr",
-    "FFIType.u64",
-    "FFIType.u32",
-    "FFIType.u32",
-    "FFIType.u32",
-    "FFIType.bool",
-    "FFIType.bool",
-    "FFIType.bool",
-    "FFIType.u32",
-  ],
-  handlerParams:
-    "typePtr: number, typeLen: bigint, kindPtr: number, kindLen: bigint,\n" +
-    "         button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number",
-  handlerBody:
-    "const tLen = Number(typeLen)\n" +
-    "const kLen = Number(kindLen)\n" +
-    "if (!typePtr || tLen === 0 || !kindPtr || kLen === 0) { return }\n" +
-    "const type = decodeStringPointer(typePtr, tLen)\n" +
-    "const kind = decodeStringPointer(kindPtr, kLen)\n" +
-    'if (type !== "mouse") { return }\n' +
-    "queueMicrotask(() => { handler({ kind, button, x, y, ctrl, shift, alt, scrollDir }) })",
-  typeGuard: "type",
-  typeScriptHandlerType:
-    "(event: { kind: string; button: number; x: number; y: number; ctrl: boolean; shift: boolean; alt: boolean; scrollDir: number }) => void",
-};
 
 function main(): void {
   const schemaPath = join(
@@ -176,21 +142,13 @@ function main(): void {
   }
   const schema: Schema = JSON.parse(readFileSync(schemaPath, "utf8"));
   generateFfiTs(schema);
-  try {
-    execSync("bun run fix --unsafe", {
-      cwd: join(import.meta.dirname, ".."),
-      stdio: "pipe",
-    });
-  } catch {
-    // Ignore formatter errors
-  }
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: build script complexity is acceptable
-function generateFfiTs(schema: Schema): void {
+function generateFfiTs(schema: Schema): string[] {
   const functions = Object.entries(schema.functions);
   const manualFns = functions.filter(([, fn]) => fn.manual);
   const generatedFns = functions.filter(([, fn]) => !fn.manual);
+  const callbacks = requiredCallbacks(schema.callbacks ?? {});
 
   const groups = new Map<string, [string, SchemaFunction][]>();
   for (const [name, fn] of generatedFns) {
@@ -204,39 +162,12 @@ function generateFfiTs(schema: Schema): void {
   let ffiContent = `// AUTO-GENERATED by scripts/generate-ffi.ts — DO NOT EDIT
 // Source: target/moontui-schema.json
 
-import { dirname, join } from "node:path"
-import { backend, FFIType, ffiBool, type Pointer } from "./platform/index"
+import { backend, FFIType, ffiBool, type MutablePointer, type Pointer, type ReadonlyPointer } from "./platform/index"
 import { type RGBAInput, toRGBA } from "./rgba"
 
-export type { Pointer } from "./platform/index"
+export type { MutablePointer, Pointer, ReadonlyPointer } from "./platform/index"
 
-function getLibraryName(): string {
-  const platform = process.platform
-  switch (platform) {
-    case "win32": return "moontui_core.dll"
-    case "darwin": return "libmoontui_core.dylib"
-    case "linux": return "libmoontui_core.so"
-    default: throw new Error(\`Unsupported platform: \${platform}\`)
-  }
-}
-
-function resolveLibPath(): string {
-  const platform = process.platform
-  const arch = process.arch
-  const packageName = \`@moontui/core-\${platform}-\${arch}\`
-  try {
-    const resolved = import.meta.resolve(\`\${packageName}/index.js\`)
-    const dir = dirname(backend.resolveURL(resolved))
-    return join(dir, getLibraryName())
-  } catch {
-    throw new Error(
-      \`moontui is not supported on the current platform: \${platform}-\${arch}. \` +
-        "Please ensure you are using a supported platform (Darwin x64/arm64, Linux x64/arm64, Windows x64)."
-    )
-  }
-}
-
-const libPath = resolveLibPath()
+const libPath = backend.resolveLibraryPath()
 
 // biome-ignore lint/complexity/noBannedTypes: opaque handle type for FFI branding
 export type Renderer = {}
@@ -298,28 +229,14 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
   const rendererFns: SchemaFunction[] = [];
   const terminalFns: SchemaFunction[] = [];
 
-  for (const [receiver, fns] of groups) {
+  for (const [, fns] of groups) {
     for (const [, fn] of fns) {
-      if (receiver === "OptimizedBuffer") {
-        bufferFns.push(fn);
-      } else if (receiver === "CliRenderer") {
-        rendererFns.push(fn);
-      }
+      pushApiFunction(fn, bufferFns, rendererFns, terminalFns);
     }
   }
 
   for (const [, fn] of manualFns) {
-    if (fn.ffi_name.startsWith("buffer")) {
-      bufferFns.push(fn);
-    } else if (
-      fn.ffi_name === "setupTerminal" ||
-      fn.ffi_name === "restoreTerminal" ||
-      fn.ffi_name === "getTerminalSize"
-    ) {
-      terminalFns.push(fn);
-    } else {
-      rendererFns.push(fn);
-    }
+    pushApiFunction(fn, bufferFns, rendererFns, terminalFns);
   }
 
   ffiContent += "export const api = {\n";
@@ -346,11 +263,11 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
   ffiContent += "      lib.symbols.setResizeCallback(p, callbackPtr)\n";
   ffiContent += "    },\n";
   ffiContent += "    createEventCallback(\n";
-  ffiContent += emitCallbackFactory(EVENT_CALLBACK_DESCRIPTOR, "    ");
+  ffiContent += emitCallbackFactory(callbacks.event, "    ");
   ffiContent += "    createResizeCallback(\n";
-  ffiContent += emitCallbackFactory(RESIZE_CALLBACK_DESCRIPTOR, "    ");
+  ffiContent += emitCallbackFactory(callbacks.resize, "    ");
   ffiContent += "    createMouseCallback(\n";
-  ffiContent += emitCallbackFactory(MOUSE_CALLBACK_DESCRIPTOR, "    ");
+  ffiContent += emitCallbackFactory(callbacks.mouse, "    ");
   ffiContent += "    setMouseCallback(\n";
   ffiContent += "      p: Pointer<Renderer>,\n";
   ffiContent += "      callbackPtr: Pointer<void> | 0\n";
@@ -373,15 +290,96 @@ function rgbaPtr(color: RGBAInput): Pointer<void> {
     "src",
     "ffi.ts"
   );
-  writeFileSync(outputPath, ffiContent, "utf8");
+  writeGeneratedFile(outputPath, ffiContent);
   console.log(`Generated ${outputPath}`);
+  const structsPath = join(
+    import.meta.dirname,
+    "..",
+    "packages",
+    "core",
+    "src",
+    "structs.ts"
+  );
+  writeGeneratedFile(structsPath, generateStructsTs(schema.structs ?? {}));
+  console.log(`Generated ${structsPath}`);
+  return [outputPath, structsPath];
+}
+
+function pushApiFunction(
+  fn: SchemaFunction,
+  bufferFns: SchemaFunction[],
+  rendererFns: SchemaFunction[],
+  terminalFns: SchemaFunction[]
+): void {
+  switch (fn.api_group) {
+    case "buffer":
+      bufferFns.push(fn);
+      return;
+    case "renderer":
+      rendererFns.push(fn);
+      return;
+    case "terminal":
+      terminalFns.push(fn);
+      return;
+    default:
+      throw new Error(`Unknown API group "${fn.api_group}" for ${fn.ffi_name}`);
+  }
+}
+
+function requiredCallbacks(callbacks: Record<string, SchemaCallback>): {
+  event: SchemaCallback;
+  mouse: SchemaCallback;
+  resize: SchemaCallback;
+} {
+  const { event, mouse, resize } = callbacks;
+  if (!(event && mouse && resize)) {
+    throw new Error("Schema is missing required callback descriptors");
+  }
+  return { event, mouse, resize };
+}
+
+function writeGeneratedFile(outputPath: string, content: string): void {
+  const root = join(import.meta.dirname, "..");
+  const tmpPath = join(
+    dirnameCompat(outputPath),
+    `.${basename(outputPath)}.${process.pid}.tmp.ts`
+  );
+  try {
+    writeFileSync(tmpPath, content, "utf8");
+    execSync(`bunx biome format --write ${relative(root, tmpPath)}`, {
+      cwd: root,
+      stdio: "inherit",
+    });
+    renameSync(tmpPath, outputPath);
+  } catch (error) {
+    rmSync(tmpPath, { force: true });
+    throw error;
+  }
+}
+
+function dirnameCompat(path: string): string {
+  return path.slice(0, Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")));
+}
+
+function generateStructsTs(structs: Record<string, SchemaStruct>): string {
+  let content = `// AUTO-GENERATED by scripts/generate-ffi.ts — DO NOT EDIT
+// Source: target/moontui-schema.json
+
+`;
+  for (const [name, struct] of Object.entries(structs)) {
+    content += `export const ${name}Struct = ${JSON.stringify(struct, null, 2)} as const\n\n`;
+  }
+  return content;
 }
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: build script complexity is acceptable
 function generateApiFunctions(fns: SchemaFunction[], indent: string): string {
   let content = "";
   for (const fn of fns) {
-    if (fn.manual && fn.ts_body) {
+    const outputWrapper = emitOutputStructWrapper(fn, indent);
+    if (outputWrapper) {
+      content += outputWrapper;
+    } else if (fn.manual && fn.ts_body) {
       const tsArgs = fn.ts_args ?? "";
       const tsReturns = fn.ts_returns ?? "void";
       content += `${indent}${fn.ffi_name}(${tsArgs}): ${tsReturns} {\n`;
@@ -397,7 +395,7 @@ function generateApiFunctions(fns: SchemaFunction[], indent: string): string {
         const paramType = resolveTsType(p.type, `${fn.ffi_name}:${p.name}`);
         return `${paramName}: ${paramType}`;
       });
-      const returnType = resolveTsType(fn.returns, `${fn.ffi_name}:returns`);
+      const returnType = resolveReturnType(fn);
       if (fn.receiver !== null) {
         const typeName =
           fn.receiver === "OptimizedBuffer" ? "Buffer" : "Renderer";
@@ -414,7 +412,8 @@ function generateApiFunctions(fns: SchemaFunction[], indent: string): string {
       });
       content += `${indent}${fn.ffi_name}(${paramList.join(", ")}): ${returnType} {\n`;
       if (fn.returns === "ptr") {
-        content += `${indent}  return toPointer(lib.symbols.${fn.ffi_name}(${callArgs.join(", ")}))\n`;
+        const cast = pointerReturnCast(fn);
+        content += `${indent}  return toPointer(lib.symbols.${fn.ffi_name}(${callArgs.join(", ")}))${cast}\n`;
       } else if (fn.returns === "void") {
         content += `${indent}  lib.symbols.${fn.ffi_name}(${callArgs.join(", ")});\n`;
       } else {
@@ -424,6 +423,39 @@ function generateApiFunctions(fns: SchemaFunction[], indent: string): string {
     }
   }
   return content;
+}
+
+function pointerReturnCast(fn: SchemaFunction): string {
+  if (fn.ffi_name === "getCurrentBuffer") {
+    return " as ReadonlyPointer<Buffer>";
+  }
+  if (fn.ffi_name === "getNextBuffer") {
+    return " as MutablePointer<Buffer>";
+  }
+  return "";
+}
+
+function emitOutputStructWrapper(
+  fn: SchemaFunction,
+  indent: string
+): string | null {
+  if (fn.output_struct === "Capabilities") {
+    return `${indent}${fn.ffi_name}(p: Pointer<Renderer>): { rgb: boolean; ansi256: boolean; ansi16: boolean } {\n${indent}  const buf = new Uint8Array(3)\n${indent}  lib.symbols.${fn.ffi_name}(p, backend.ptr(buf))\n${indent}  return { rgb: buf[0] !== 0, ansi256: buf[1] !== 0, ansi16: buf[2] !== 0 }\n${indent}},\n`;
+  }
+  if (fn.output_struct === "FrameStats") {
+    return `${indent}${fn.ffi_name}(p: Pointer<Renderer>): { lastFrameTimeMs: number; averageFrameTimeMs: number; frameCount: number; cellsUpdated: number; averageCellsUpdated: number; renderTimeUs: number; stdoutWriteTimeUs: number } {\n${indent}  const buf = new Uint8Array(56)\n${indent}  const bufPtr = backend.ptr(buf)\n${indent}  lib.symbols.${fn.ffi_name}(p, bufPtr)\n${indent}  const view = new DataView(buf.buffer)\n${indent}  return {\n${indent}    lastFrameTimeMs: view.getFloat64(0, true),\n${indent}    averageFrameTimeMs: view.getFloat64(8, true),\n${indent}    frameCount: Number(view.getBigUint64(16, true)),\n${indent}    cellsUpdated: view.getUint32(24, true),\n${indent}    averageCellsUpdated: view.getUint32(28, true),\n${indent}    renderTimeUs: view.getFloat64(32, true),\n${indent}    stdoutWriteTimeUs: view.getFloat64(40, true),\n${indent}  }\n${indent}},\n`;
+  }
+  return null;
+}
+
+function resolveReturnType(fn: SchemaFunction): string {
+  if (fn.ffi_name === "getCurrentBuffer") {
+    return "ReadonlyPointer<Buffer>";
+  }
+  if (fn.ffi_name === "getNextBuffer") {
+    return "MutablePointer<Buffer>";
+  }
+  return resolveTsType(fn.returns, `${fn.ffi_name}:returns`);
 }
 
 main();
