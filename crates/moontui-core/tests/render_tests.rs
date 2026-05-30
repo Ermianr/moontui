@@ -1,4 +1,14 @@
-use moontui_core::renderer::CliRenderer;
+use moontui_core::{ATTR_BOLD, renderer::CliRenderer};
+
+fn assert_ordered(output: &str, parts: &[&str]) {
+  let mut offset = 0;
+  for part in parts {
+    let Some(index) = output[offset..].find(part) else {
+      panic!("missing ordered ANSI fragment: {part:?}");
+    };
+    offset += index + part.len();
+  }
+}
 
 #[test]
 fn test_single_colored_cell_ansi() {
@@ -12,6 +22,55 @@ fn test_single_colored_cell_ansi() {
   assert!(output_str.contains("\x1b[38;2;255;0;0m"), "should set foreground color");
   assert!(output_str.contains("\x1b[48;2;0;0;0m"), "should set background color");
   assert!(output_str.contains('X'), "should render character X");
+}
+
+#[test]
+fn test_colored_cell_keeps_color_until_character() {
+  let mut renderer = CliRenderer::create_test_renderer(10, 5);
+  let fg = [65535, 0, 0, 65535];
+  let bg = [0, 0, 0, 65535];
+  renderer.get_next_buffer_mut().draw_char('X' as u32, 0, 0, &fg, &bg, 0);
+
+  renderer.render(false).unwrap();
+
+  let output = renderer.get_output_data().to_vec();
+  let output_str = String::from_utf8_lossy(&output);
+  assert_ordered(&output_str, &["\x1b[0m", "\x1b[38;2;255;0;0m", "\x1b[48;2;0;0;0m", "X"]);
+}
+
+#[test]
+fn test_attribute_change_rebuilds_colors_before_text() {
+  let mut renderer = CliRenderer::create_test_renderer(10, 5);
+  let fg = [65535, 65535, 65535, 65535];
+  let bg = [0, 0, 0, 65535];
+  renderer.get_next_buffer_mut().draw_char('A' as u32, 0, 0, &fg, &bg, 0);
+  renderer.get_next_buffer_mut().draw_char('B' as u32, 1, 0, &fg, &bg, ATTR_BOLD);
+
+  renderer.render(false).unwrap();
+
+  let output = renderer.get_output_data().to_vec();
+  let output_str = String::from_utf8_lossy(&output);
+  assert_ordered(
+    &output_str,
+    &["A", "\x1b[0m", "\x1b[38;2;255;255;255m", "\x1b[48;2;0;0;0m", "\x1b[1m", "B"],
+  );
+}
+
+#[test]
+fn test_frame_ends_with_reset_before_cursor_update() {
+  let mut renderer = CliRenderer::create_test_renderer(10, 5);
+  let fg = [65535, 65535, 65535, 65535];
+  let bg = [0, 0, 0, 65535];
+  renderer.get_next_buffer_mut().draw_char('X' as u32, 0, 0, &fg, &bg, 0);
+
+  renderer.render(false).unwrap();
+
+  let output = renderer.get_output_data().to_vec();
+  let output_str = String::from_utf8_lossy(&output);
+  assert!(
+    output_str.contains("X\x1b[0m\x1b[?25l"),
+    "frame should reset style before hiding cursor"
+  );
 }
 
 #[test]

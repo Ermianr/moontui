@@ -48,7 +48,6 @@ pub fn indexed_color(slot: u8, r: u8, g: u8, b: u8) -> RGBA {
 }
 
 /// Create an RGBA color with Default intent.
-#[cfg(test)]
 pub fn default_color(r: u8, g: u8, b: u8, a: u8) -> RGBA {
   [
     pack_component(r, ColorIntent::Default, 0),

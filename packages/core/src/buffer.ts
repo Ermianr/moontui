@@ -1,6 +1,6 @@
 import { api, type Buffer as FfiBuffer, type Pointer } from "./ffi";
 import { backend } from "./platform/index";
-import { RGBA, type RGBAInput, rgb } from "./rgba";
+import { RGBA, type RGBAInput, terminalDefault } from "./rgba";
 
 export const ATTR_CONTINUATION = 1 << 0;
 export const ATTR_BOLD = 1 << 1;
@@ -108,7 +108,7 @@ export class MoonBuffer {
       x,
       y,
       fgColor,
-      bgColor ?? rgb(0, 0, 0, 255),
+      bgColor ?? terminalDefault(),
       attributes ?? 0
     );
   }
@@ -157,7 +157,7 @@ export class MoonBuffer {
       x,
       y,
       fgColor,
-      bgColor ?? rgb(0, 0, 0, 255),
+      bgColor ?? terminalDefault(),
       attributes ?? 0
     );
   }

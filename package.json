@@ -51,7 +51,7 @@
     "*.rs": "node -e \"require('child_process').execSync('cargo fmt --all',{stdio:'inherit'})\"",
     "*.{ts,tsx}": [
       "ultracite fix",
-      "bun run typecheck"
+      "node -e \"require('child_process').execSync('bun run typecheck',{stdio:'inherit'})\""
     ]
   },
   "engines": {

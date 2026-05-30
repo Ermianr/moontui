@@ -77,3 +77,21 @@ fn test_resize_to_smaller_dimensions() {
   assert_eq!(renderer.get_current_buffer().width(), 40);
   assert_eq!(renderer.get_current_buffer().height(), 10);
 }
+
+#[test]
+fn test_resize_produces_nonempty_render_output() {
+  let mut renderer = CliRenderer::create_test_renderer(80, 24);
+  renderer.inject_resize_event(40, 10);
+  assert!(!renderer.get_output_data().is_empty(), "resize render should produce output");
+}
+
+#[test]
+fn test_resize_force_render_uses_terminal_default_background() {
+  let mut renderer = CliRenderer::create_test_renderer(80, 24);
+
+  renderer.inject_resize_event(40, 10);
+
+  let output = String::from_utf8_lossy(renderer.get_output_data());
+  assert!(output.contains("\x1b[49m"), "resize render should reset to terminal default bg");
+  assert!(!output.contains("\x1b[48;2;0;0;0m"), "resize render should not paint opaque RGB black");
+}

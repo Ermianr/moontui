@@ -1,23 +1,28 @@
-import { CliRenderer, rgb } from "@moontui/core";
+import { CliRenderer, rgb, terminalDefault } from "@moontui/core";
 
 const white = rgb(255, 255, 255, 255);
-const black = rgb(0, 0, 0, 255);
+const background = terminalDefault();
 
 const renderer = new CliRenderer();
 renderer.setupTerminal({ useAlternateScreen: true });
 
-const buffer = renderer.getNextBuffer();
-buffer.clear(black);
-buffer.drawText("Hello from MoonTUI!", 2, 2, white);
-buffer.drawText("Press any key to exit...", 2, 4, white);
+function draw() {
+  const buffer = renderer.getNextBuffer();
+  buffer.clear(background);
+  buffer.drawText("Hello from MoonTUI!", 2, 2, white, background);
+  buffer.drawText("Press any key to exit...", 2, 4, white, background);
+  renderer.render();
+}
 
-renderer.render();
+draw();
 
 renderer.on("key", () => {
   renderer.restoreTerminal();
   renderer.destroy();
   process.exit(0);
 });
+
+renderer.on("resize", () => draw());
 
 function loop() {
   renderer.processEvents();

@@ -126,6 +126,16 @@ MANDATORY: NEVER edit these files directly.
 - `packages/core/dist/*` — Built from `packages/core/src/` via build script
 - `packages/core/native/*` — Prebuilt native binaries
 
+## CRITICAL: Native Rebuild After Rust Changes
+
+If you change ANY Rust code in `crates/moontui-core/`, you MUST rebuild and redistribute the native binary. The TS examples load from `node_modules/@moontui/core-win32-x64/`, NOT from `target/debug/`. Skipping this means your changes have zero effect at runtime.
+
+```bash
+cargo build -p moontui-core
+Copy-Item target\debug\moontui_core.dll packages\core\native\moontui_core.dll -Force
+Copy-Item target\debug\moontui_core.dll packages\core\node_modules\@moontui\core-win32-x64\moontui_core.dll -Force
+```
+
 ## Commits and PR Titles
 
 Use conventional commit messages: `type(scope): summary`.

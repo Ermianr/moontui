@@ -1,5 +1,6 @@
 use crate::ansi;
 use crate::buffer::OptimizedBuffer;
+use crate::color;
 use crate::diff_renderer::DiffRenderer;
 use crate::event_bridge::EventBridge;
 use crate::frame_stats::FrameStats;
@@ -110,6 +111,7 @@ impl CliRenderer {
       self.raw_mode_enabled = true;
     }
     let mut buf = Vec::new();
+    ansi::write_reset(&mut buf);
     if use_alternate_screen {
       ansi::write_enter_alt_screen(&mut buf);
       self.alternate_screen = true;
@@ -199,6 +201,7 @@ impl CliRenderer {
     let write_time_us = write_start.elapsed().as_micros() as f64;
 
     std::mem::swap(&mut self.front_buffer, &mut self.back_buffer);
+    self.back_buffer.clear(&color::default_color(0, 0, 0, 255));
 
     self.stats.record_frame(cells_updated, render_time_us, write_time_us);
 
@@ -209,6 +212,7 @@ impl CliRenderer {
     let count = self.event_bridge.process_events();
     if let Some((w, h)) = self.event_bridge.take_pending_resize() {
       self.resize(w, h);
+      self.front_buffer.clear(&color::default_color(0, 0, 0, 255));
       let _ = self.render(true);
     }
     count
@@ -365,6 +369,7 @@ impl CliRenderer {
   pub fn inject_resize_event(&mut self, width: u32, height: u32) {
     self.event_bridge.inject_resize_event(width, height);
     self.resize(width, height);
+    self.front_buffer.clear(&color::default_color(0, 0, 0, 255));
     let _ = self.render(true);
   }
 

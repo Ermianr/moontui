@@ -105,19 +105,17 @@ impl DiffRenderer {
 
           cells_updated += 1;
 
-          if self.ansi_state.fg != Some(back.fg[idx]) {
-            let fg = back.fg[idx];
-            ansi::write_fg(output, fg, self.caps);
-            self.ansi_state.fg = Some(back.fg[idx]);
-          }
-          if self.ansi_state.bg != Some(back.bg[idx]) {
-            let bg = back.bg[idx];
-            ansi::write_bg(output, bg, self.caps);
-            self.ansi_state.bg = Some(back.bg[idx]);
-          }
           let style_attrs = back.attributes[idx] & !ATTR_CONTINUATION;
-          if self.ansi_state.attrs != Some(style_attrs) {
+          let style_changed = self.ansi_state.fg != Some(back.fg[idx])
+            || self.ansi_state.bg != Some(back.bg[idx])
+            || self.ansi_state.attrs != Some(style_attrs);
+          if style_changed {
+            ansi::write_reset(output);
+            ansi::write_fg(output, back.fg[idx], self.caps);
+            ansi::write_bg(output, back.bg[idx], self.caps);
             ansi::write_style(output, style_attrs);
+            self.ansi_state.fg = Some(back.fg[idx]);
+            self.ansi_state.bg = Some(back.bg[idx]);
             self.ansi_state.attrs = Some(style_attrs);
           }
 
@@ -131,6 +129,10 @@ impl DiffRenderer {
           output.extend_from_slice(s.as_bytes());
         }
       }
+    }
+
+    if !rects.is_empty() {
+      ansi::write_reset(output);
     }
 
     if cursor_visible {
