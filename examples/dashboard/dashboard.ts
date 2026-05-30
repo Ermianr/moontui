@@ -3,9 +3,11 @@ import {
   ATTR_ITALIC,
   ATTR_UNDERLINE,
   api,
+  BoxRenderable,
   CliRenderer,
   type MoonBuffer,
   rgb,
+  TextRenderable,
   terminalDefault,
 } from "@moontui/core";
 
@@ -33,6 +35,14 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 
 class Dashboard {
   private renderer!: CliRenderer;
+  private systemPanel!: BoxRenderable;
+  private stylePanel!: BoxRenderable;
+  private colorPanel!: BoxRenderable;
+  private statsPanel!: BoxRenderable;
+  private systemLines: TextRenderable[] = [];
+  private styleLines: TextRenderable[] = [];
+  private colorSwatches: TextRenderable[] = [];
+  private statsLines: TextRenderable[] = [];
   private running = false;
   private frameCount = 0;
   private toggleState = false;
@@ -43,6 +53,7 @@ class Dashboard {
     const { width, height } = api.terminal.getTerminalSize();
     this.renderer = new CliRenderer({ width, height });
     this.renderer.setupTerminal({ useAlternateScreen: true });
+    this.setupRenderableTree();
     this.running = true;
 
     this.renderer.on("key", (e) => {
@@ -58,6 +69,123 @@ class Dashboard {
     this.renderer.on("resize", () => {});
 
     this.loop();
+  }
+
+  private setupRenderableTree(): void {
+    this.systemPanel = new BoxRenderable({
+      border: true,
+      borderColor: COLOR.cyan,
+      backgroundColor: COLOR.panelBg,
+      title: " System Info ",
+    });
+    this.stylePanel = new BoxRenderable({
+      border: true,
+      borderColor: COLOR.yellow,
+      backgroundColor: COLOR.panelBg,
+      title: " Text Styles ",
+    });
+    this.colorPanel = new BoxRenderable({
+      border: true,
+      borderColor: COLOR.gray,
+      backgroundColor: COLOR.panelBg,
+      title: " Colors ",
+    });
+    this.statsPanel = new BoxRenderable({
+      border: true,
+      borderColor: COLOR.green,
+      backgroundColor: COLOR.panelBg,
+      title: " Render Stats ",
+    });
+
+    this.systemLines = Array.from(
+      { length: 4 },
+      () =>
+        new TextRenderable({
+          content: "",
+          foregroundColor: COLOR.white,
+          backgroundColor: COLOR.panelBg,
+        })
+    );
+
+    this.styleLines = [
+      new TextRenderable({
+        content: "Bold text",
+        foregroundColor: COLOR.white,
+        backgroundColor: COLOR.panelBg,
+        attributes: ATTR_BOLD,
+      }),
+      new TextRenderable({
+        content: "Italic text",
+        foregroundColor: COLOR.green,
+        backgroundColor: COLOR.panelBg,
+        attributes: ATTR_ITALIC,
+      }),
+      new TextRenderable({
+        content: "Underline",
+        foregroundColor: COLOR.yellow,
+        backgroundColor: COLOR.panelBg,
+        attributes: ATTR_UNDERLINE,
+      }),
+      new TextRenderable({
+        content: "Bold+Italic",
+        foregroundColor: COLOR.magenta,
+        backgroundColor: COLOR.panelBg,
+        // biome-ignore lint/suspicious/noBitwiseOperators: attribute flag combination
+        attributes: ATTR_BOLD | ATTR_ITALIC,
+      }),
+    ];
+
+    const swatchColors = [
+      COLOR.red,
+      COLOR.green,
+      COLOR.blue,
+      COLOR.yellow,
+      COLOR.magenta,
+      COLOR.cyan,
+      COLOR.orange,
+      COLOR.gray,
+    ];
+    this.colorSwatches = swatchColors.map(
+      (color) =>
+        new TextRenderable({
+          content: "██",
+          foregroundColor: color,
+          backgroundColor: COLOR.panelBg,
+        })
+    );
+
+    this.statsLines = Array.from(
+      { length: 3 },
+      () =>
+        new TextRenderable({
+          content: "",
+          foregroundColor: COLOR.cyan,
+          backgroundColor: COLOR.panelBg,
+        })
+    );
+
+    for (const child of [
+      ...this.systemLines,
+      ...this.styleLines,
+      ...this.colorSwatches,
+      ...this.statsLines,
+    ]) {
+      if (this.systemLines.includes(child)) {
+        this.systemPanel.add(child);
+      } else if (this.styleLines.includes(child)) {
+        this.stylePanel.add(child);
+      } else if (this.colorSwatches.includes(child)) {
+        this.colorPanel.add(child);
+      } else {
+        this.statsPanel.add(child);
+      }
+    }
+
+    this.renderer.root
+      .add(this.systemPanel)
+      .add(this.stylePanel)
+      .add(this.colorPanel)
+      .add(this.statsPanel);
   }
 
   private shutdown(): void {
@@ -123,19 +251,12 @@ class Dashboard {
     const leftColW = Math.floor(w * 0.45);
     const rightColW = w - leftColW - gap - 2;
 
-    // --- Panel 1: System Info (left column) ---
     const p1x = 1;
     const p1y = contentY;
-    buf.drawBox({
-      x: p1x,
-      y: p1y,
-      width: leftColW,
-      height: panelH,
-      border: true,
-      borderColor: COLOR.cyan,
-      backgroundColor: COLOR.panelBg,
-      title: " System Info ",
-    });
+    this.systemPanel.x = p1x;
+    this.systemPanel.y = p1y;
+    this.systemPanel.width = leftColW;
+    this.systemPanel.height = panelH;
     const uptime = Math.floor((this.timer * 50) / 1000);
     const lines = [
       `Uptime: ${uptime}s`,
@@ -143,115 +264,55 @@ class Dashboard {
       `Toggle: ${this.toggleState ? "ON " : "OFF"}`,
       `Size: ${w}x${h}`,
     ];
-    for (let i = 0; i < lines.length; i++) {
-      buf.drawText(lines[i], p1x + 2, p1y + 2 + i, COLOR.white, COLOR.panelBg);
-    }
+    lines.forEach((line, i) => {
+      this.systemLines[i].content = line;
+      this.systemLines[i].x = 2;
+      this.systemLines[i].y = 2 + i;
+    });
 
-    // --- Panel 2: Style Demo (right column) ---
     const p2x = leftColW + gap + 1;
     const p2y = contentY;
-    buf.drawBox({
-      x: p2x,
-      y: p2y,
-      width: rightColW,
-      height: panelH,
-      border: true,
-      borderColor: COLOR.yellow,
-      backgroundColor: COLOR.panelBg,
-      title: " Text Styles ",
+    this.stylePanel.x = p2x;
+    this.stylePanel.y = p2y;
+    this.stylePanel.width = rightColW;
+    this.stylePanel.height = panelH;
+    this.styleLines.forEach((line, i) => {
+      line.x = 2;
+      line.y = 2 + i;
     });
-    buf.drawText(
-      "Bold text",
-      p2x + 2,
-      p2y + 2,
-      COLOR.white,
-      COLOR.panelBg,
-      ATTR_BOLD
-    );
-    buf.drawText(
-      "Italic text",
-      p2x + 2,
-      p2y + 3,
-      COLOR.green,
-      COLOR.panelBg,
-      ATTR_ITALIC
-    );
-    buf.drawText(
-      "Underline",
-      p2x + 2,
-      p2y + 4,
-      COLOR.yellow,
-      COLOR.panelBg,
-      ATTR_UNDERLINE
-    );
-    buf.drawText(
-      "Bold+Italic",
-      p2x + 2,
-      p2y + 5,
-      COLOR.magenta,
-      COLOR.panelBg,
-      // biome-ignore lint/suspicious/noBitwiseOperators: attribute flag combination
-      ATTR_BOLD | ATTR_ITALIC
-    );
 
     const bottomPanelY = contentY + panelH + gap;
 
-    // --- Panel 3: Color Palette (left column) ---
     const p3x = 1;
     const p3y = bottomPanelY;
-    const colors = [
-      COLOR.red,
-      COLOR.green,
-      COLOR.blue,
-      COLOR.yellow,
-      COLOR.magenta,
-      COLOR.cyan,
-      COLOR.orange,
-      COLOR.gray,
-    ];
-    const swatchCount = Math.min(colors.length, leftColW - 2);
-    buf.drawBox({
-      x: p3x,
-      y: p3y,
-      width: leftColW,
-      height: 5,
-      border: true,
-      borderColor: COLOR.gray,
-      backgroundColor: COLOR.panelBg,
-      title: " Colors ",
+    const swatchCount = Math.min(this.colorSwatches.length, leftColW - 2);
+    this.colorPanel.x = p3x;
+    this.colorPanel.y = p3y;
+    this.colorPanel.width = leftColW;
+    this.colorPanel.height = 5;
+    this.colorSwatches.forEach((swatch, i) => {
+      swatch.x = 2 + i * 2;
+      swatch.y = 2;
+      swatch.content = i < swatchCount ? "██" : "";
     });
-    for (let i = 0; i < swatchCount; i++) {
-      buf.fillRect(p3x + 2 + i, p3y + 2, 1, 2, colors[i]);
-    }
 
-    // --- Panel 4: Stats (right column) ---
     const p4x = leftColW + gap + 1;
     const p4y = bottomPanelY;
-    buf.drawBox({
-      x: p4x,
-      y: p4y,
-      width: rightColW,
-      height: 5,
-      border: true,
-      borderColor: COLOR.green,
-      backgroundColor: COLOR.panelBg,
-      title: " Render Stats ",
-    });
+    this.statsPanel.x = p4x;
+    this.statsPanel.y = p4y;
+    this.statsPanel.width = rightColW;
+    this.statsPanel.height = 5;
     const stats = this.renderer.getStats();
     const statsLines = [
       `Frame time: ${stats.lastFrameTimeMs.toFixed(1)}ms`,
       `Cells/upd: ${stats.averageCellsUpdated}`,
       `Avg frame: ${stats.averageFrameTimeMs.toFixed(1)}ms`,
     ];
-    for (let i = 0; i < statsLines.length; i++) {
-      buf.drawText(
-        statsLines[i],
-        p4x + 2,
-        p4y + 2 + i,
-        COLOR.cyan,
-        COLOR.panelBg
-      );
-    }
+    statsLines.forEach((line, i) => {
+      this.statsLines[i].content = line;
+      this.statsLines[i].x = 2;
+      this.statsLines[i].y = 2 + i;
+    });
 
     // --- Animated progress bar ---
     const progY = bottomPanelY + 6;
