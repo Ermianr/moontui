@@ -38,6 +38,17 @@
         "@types/bun": "latest",
       },
     },
+    "examples/mouse-demo": {
+      "name": "@moontui/example-mouse-demo",
+      "version": "0.1.0",
+      "dependencies": {
+        "@moontui/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@moontui/config": "workspace:*",
+        "@types/bun": "latest",
+      },
+    },
     "packages/config": {
       "name": "@moontui/config",
     },
@@ -124,6 +135,8 @@
     "@moontui/example-dashboard": ["@moontui/example-dashboard@workspace:examples/dashboard"],
 
     "@moontui/example-hello": ["@moontui/example-hello@workspace:examples/hello"],
+
+    "@moontui/example-mouse-demo": ["@moontui/example-mouse-demo@workspace:examples/mouse-demo"],
 
     "@simple-libs/child-process-utils": ["@simple-libs/child-process-utils@1.0.2", "", { "dependencies": { "@simple-libs/stream-utils": "^1.2.0" } }, "sha512-/4R8QKnd/8agJynkNdJmNw2MBxuFTRcNFnE5Sg/G+jkSsV8/UBgULMzhizWWW42p8L5H7flImV2ATi79Ove2Tw=="],
 

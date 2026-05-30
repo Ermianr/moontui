@@ -90,6 +90,37 @@ pub fn write_clear_screen(out: &mut Vec<u8>) {
   out.extend_from_slice(b"\x1B[2J\x1B[H");
 }
 
+pub fn write_enable_mouse(out: &mut Vec<u8>) {
+  out.extend_from_slice(b"\x1B[?1000h");
+  out.extend_from_slice(b"\x1B[?1002h");
+  out.extend_from_slice(b"\x1B[?1006h");
+}
+
+pub fn write_enable_mouse_with_motion(out: &mut Vec<u8>) {
+  out.extend_from_slice(b"\x1B[?1000h");
+  out.extend_from_slice(b"\x1B[?1002h");
+  out.extend_from_slice(b"\x1B[?1003h");
+  out.extend_from_slice(b"\x1B[?1006h");
+}
+
+pub fn write_disable_mouse(out: &mut Vec<u8>) {
+  out.extend_from_slice(b"\x1B[?1006l");
+  out.extend_from_slice(b"\x1B[?1003l");
+  out.extend_from_slice(b"\x1B[?1002l");
+  out.extend_from_slice(b"\x1B[?1000l");
+}
+
+pub fn write_pointer_style(out: &mut Vec<u8>, style: u32) {
+  match style {
+    1 => out.extend_from_slice(b"\x1B]22;pointer\x1B\\"),
+    2 => out.extend_from_slice(b"\x1B]22;text\x1B\\"),
+    3 => out.extend_from_slice(b"\x1B]22;crosshair\x1B\\"),
+    4 => out.extend_from_slice(b"\x1B]22;move\x1B\\"),
+    5 => out.extend_from_slice(b"\x1B]22;not-allowed\x1B\\"),
+    _ => out.extend_from_slice(b"\x1B]22;default\x1B\\"),
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -231,6 +262,43 @@ mod tests {
     let mut out = Vec::new();
     write_clear_screen(&mut out);
     assert_eq!(out, b"\x1B[2J\x1B[H");
+  }
+
+  #[test]
+  fn test_write_enable_mouse() {
+    let mut out = Vec::new();
+    write_enable_mouse(&mut out);
+    assert_eq!(out, b"\x1B[?1000h\x1B[?1002h\x1B[?1006h");
+  }
+
+  #[test]
+  fn test_write_enable_mouse_with_motion() {
+    let mut out = Vec::new();
+    write_enable_mouse_with_motion(&mut out);
+    assert_eq!(out, b"\x1B[?1000h\x1B[?1002h\x1B[?1003h\x1B[?1006h");
+  }
+
+  #[test]
+  fn test_write_disable_mouse() {
+    let mut out = Vec::new();
+    write_disable_mouse(&mut out);
+    assert_eq!(out, b"\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l");
+  }
+
+  #[test]
+  fn test_write_pointer_style() {
+    let mut out = Vec::new();
+    write_pointer_style(&mut out, 0);
+    assert_eq!(out, b"\x1B]22;default\x1B\\");
+    let mut out = Vec::new();
+    write_pointer_style(&mut out, 1);
+    assert_eq!(out, b"\x1B]22;pointer\x1B\\");
+    let mut out = Vec::new();
+    write_pointer_style(&mut out, 3);
+    assert_eq!(out, b"\x1B]22;crosshair\x1B\\");
+    let mut out = Vec::new();
+    write_pointer_style(&mut out, 5);
+    assert_eq!(out, b"\x1B]22;not-allowed\x1B\\");
   }
 
   #[test]

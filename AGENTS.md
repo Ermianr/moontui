@@ -63,6 +63,31 @@ bun run clean                            # Remove build artifacts
 
 Always run `bun typecheck` from package directories (e.g., `packages/core`), never `tsc` directly.
 
+## Testing
+
+### Commands
+
+```bash
+cargo test                               # Run Rust tests
+cargo test -p moontui-core               # Test specific crate
+bun run test:ts                          # Run TS tests
+bun run test                             # Run all tests
+```
+
+### Conventions
+
+**Rust:** Name tests descriptively (`buffer_should_handle_wide_characters`), one assertion per test when possible, integration tests in `crates/moontui-core/tests/`.
+
+**TypeScript:** Use `bun test` from `packages/core`, tests co-located with source (`src/*.test.ts`), avoid mocks — test actual implementation.
+
+### Principles
+
+1. **Test the real pipeline, not just mocks.** If a harness bypasses a subsystem, add tests that exercise the real path.
+2. **Verify side effects in output.** When code produces output (ANSI, files, network), assert it appears in the destination.
+3. **Integration tests catch what unit tests miss.** Add integration tests for I/O features.
+4. **Don't trust the test harness.** Ask: "What subsystem is bypassed? What tests would catch bugs there?"
+5. **Test configuration end-to-end.** Verify options affect behavior, not just storage.
+
 ### FFI Codegen Workflow
 
 The FFI boundary is auto-generated from Rust annotations. When adding new FFI functions:
@@ -73,6 +98,8 @@ The FFI boundary is auto-generated from Rust annotations. When adding new FFI fu
 4. The generated files are marked `DO NOT EDIT` — never edit them manually
 
 For complex functions (multi-pointer args, slice conversion, etc.), use `/// @ffi_manual` and keep the manual implementation in `lib.rs`.
+
+**IMPORTANT:** If you add manual FFI wrappers (e.g., callback trampolines in `scripts/generate-ffi.ts`), you MUST update the codegen script to include them. The script has hardcoded sections for `createEventCallback`, `createResizeCallback`, etc. — when adding new callback types, add the corresponding generation code to the script, otherwise it will be overwritten on the next `bun run build:codegen`.
 
 ## Runtime Portability
 
@@ -159,14 +186,6 @@ Enforced by `rustfmt.toml`:
 - `use_field_init_shorthand = true`
 
 Run: `cargo fmt --all`
-
-## Testing
-
-- Name tests descriptively: `buffer_should_handle_wide_characters()`
-- One assertion per test when possible
-- Use `cargo test` from repo root or `cargo test -p moontui-core` for the core crate
-- Integration tests live in `crates/moontui-core/tests/`
-- Test helpers in `crates/moontui-core/src/test_helpers.rs`
 
 ## Documentation
 
@@ -293,22 +312,6 @@ Run: `bun run fmt:ts:check` (check) / `bun run fmt:ts` (auto-fix)
 ## Imports
 
 Use explicit imports, grouped by: built-ins, external deps, internal modules.
-
-## Testing
-
-- Use `bun test` from the `packages/core` directory
-- Avoid mocks — test actual implementation
-- Do not duplicate logic into tests
-- Descriptive test names
-- Tests are co-located with source: `src/*.test.ts`
-
-```ts
-import { test, expect } from "bun:test"
-
-test("buffer should handle wide characters", () => {
-  // ...
-})
-```
 
 ## Debugging
 

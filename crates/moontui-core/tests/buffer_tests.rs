@@ -234,7 +234,7 @@ fn test_regression_clear_screen_removes_residual() {
   renderer.get_next_buffer_mut().draw_text("Residual", 0, 0, &fg, &bg, 0);
   renderer.render(false).unwrap();
   renderer.clear_output();
-  renderer.setup_terminal(true).unwrap();
+  renderer.setup_terminal(true, false, false).unwrap();
   let output = renderer.get_output_data().to_vec();
   let output_str = String::from_utf8_lossy(&output);
   assert!(output_str.contains("\x1b[2J\x1b[H"), "setup_terminal should clear screen");

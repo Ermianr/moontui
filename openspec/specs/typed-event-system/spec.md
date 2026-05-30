@@ -27,7 +27,17 @@ The `TypedEmitter<Events>` class SHALL accept a generic type parameter mapping e
 - **AND** `emit("key", renderStats)` produces a compile-time error
 
 ### Requirement: CliRenderer uses TypedEmitter with RendererEvents
+
 The `CliRenderer` event system SHALL use `TypedEmitter<RendererEvents>` as its internal handler storage, replacing the current `Map<EventType, Set<(event: any) => void>>`.
+
+```typescript
+interface RendererEvents {
+  key: [KeyEvent];
+  resize: [ResizeEvent];
+  frame: [FrameEvent];
+  mouse: [MouseEvent];
+}
+```
 
 #### Scenario: Internal storage is typed
 - **WHEN** `renderer.on("key", handler)` is called
@@ -35,9 +45,14 @@ The `CliRenderer` event system SHALL use `TypedEmitter<RendererEvents>` as its i
 - **AND** `renderer.emit("frame", stats)` dispatches through the `TypedEmitter`
 
 #### Scenario: Public on overloads delegate to TypedEmitter
-- **WHEN** `renderer.on("key", handler)` is called
-- **THEN** it delegates to `this._emitter.on("key", handler)`
+- **WHEN** `renderer.on("mouse", handler)` is called
+- **THEN** it delegates to `this._emitter.on("mouse", handler)`
 - **AND** the public overloaded signatures remain unchanged
+
+#### Scenario: Multiple event types with distinct argument types
+- **WHEN** `emitter` has events `{ key: [KeyEvent], frame: [RenderStats], resize: [ResizeEvent], mouse: [MouseEvent] }`
+- **THEN** each event type has independently typed handler signatures
+- **AND** `emit("mouse", renderStats)` produces a compile-time error
 
 ### Requirement: Pointer type is branded to prevent misuse
 The `Pointer<T>` type SHALL use a `unique symbol` brand to create an opaque type that cannot be accidentally confused with `number` or `bigint`.

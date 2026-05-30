@@ -6,7 +6,7 @@ Defines the event polling and callback dispatch module for processing user input
 
 ### Requirement: EventBridge SHALL poll crossterm events
 
-`EventBridge::process_events()` SHALL poll crossterm for key and resize events using a zero-timeout poll. For each non-release `KeyEvent`, it SHALL convert via `input::convert_key_event` and invoke the registered key callback. For each `Event::Resize`, it SHALL invoke the registered resize callback.
+`EventBridge::process_events()` SHALL poll crossterm for key, resize, AND mouse events using a zero-timeout poll. For each non-release `KeyEvent`, it SHALL convert via `input::convert_key_event` and invoke the registered key callback. For each `Event::Resize`, it SHALL invoke the registered resize callback. For each `Event::Mouse`, it SHALL convert via `input::convert_mouse_event` and invoke the registered mouse callback.
 
 #### Scenario: Registered callback is invoked on key press
 - **WHEN** crossterm reports a `KeyEvent::Char('x')` with no modifiers
@@ -20,6 +20,17 @@ Defines the event polling and callback dispatch module for processing user input
 - **WHEN** crossterm reports `Event::Resize(120, 40)` and a resize callback is registered
 - **THEN** the resize callback is invoked with width=120, height=40
 - **AND** the key callback is NOT invoked
+
+#### Scenario: Mouse events invoke mouse callback
+- **WHEN** crossterm reports `Event::Mouse(mouse_event)` and a mouse callback is registered
+- **THEN** the mouse callback is invoked with the mouse event data
+- **AND** the key callback is NOT invoked
+- **AND** the resize callback is NOT invoked
+
+#### Scenario: Mouse events ignored when no callback registered
+- **WHEN** crossterm reports `Event::Mouse(mouse_event)` and no mouse callback is registered
+- **THEN** no callback is invoked
+- **AND** no panic occurs
 
 ### Requirement: EventBridge SHALL manage callback lifecycle
 

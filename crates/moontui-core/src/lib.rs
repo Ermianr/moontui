@@ -8,6 +8,7 @@ mod color;
 mod diff_renderer;
 mod event_bridge;
 mod frame_stats;
+mod hit_grid;
 pub mod input;
 mod output_sink;
 pub mod renderer;
@@ -71,18 +72,23 @@ pub extern "C" fn render(renderer: *mut CliRenderer, force: bool) -> i32 {
 }
 
 /// @ffi_manual
-/// @ts_args p: Pointer<Renderer>, useAlternateScreen: boolean
+/// @ts_args p: Pointer<Renderer>, useAlternateScreen: boolean, enableMouse: boolean, enableMouseMovement: boolean
 /// @ts_returns number
-/// @ts_body return lib.symbols.setupTerminal(p, ffiBool(useAlternateScreen))
+/// @ts_body return lib.symbols.setupTerminal(p, ffiBool(useAlternateScreen), ffiBool(enableMouse), ffiBool(enableMouseMovement))
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
-pub extern "C" fn setupTerminal(renderer: *mut CliRenderer, use_alternate_screen: bool) -> i32 {
+pub extern "C" fn setupTerminal(
+  renderer: *mut CliRenderer,
+  use_alternate_screen: bool,
+  enable_mouse: bool,
+  enable_mouse_movement: bool,
+) -> i32 {
   if renderer.is_null() {
     return 1;
   }
   unsafe {
-    match (*renderer).setup_terminal(use_alternate_screen) {
+    match (*renderer).setup_terminal(use_alternate_screen, enable_mouse, enable_mouse_movement) {
       Ok(()) => 0,
       Err(_) => 1,
     }
@@ -355,5 +361,36 @@ pub extern "C" fn injectResizeEvent(renderer: *mut CliRenderer, width: u32, heig
   }
   unsafe {
     (*renderer).inject_resize_event(width, height);
+  }
+}
+
+/// @ffi_manual
+/// @ts_args p: Pointer<Renderer>, kind: string, button: number, x: number, y: number, ctrl: boolean, shift: boolean, alt: boolean, scrollDir: number
+/// @ts_returns void
+/// @ts_body const kindBuf = new TextEncoder().encode(kind); lib.symbols.injectMouseEvent(p, kindBuf, BigInt(kindBuf.byteLength), button, x, y, ctrl, shift, alt, scrollDir)
+#[moontui_export_manual]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn injectMouseEvent(
+  renderer: *mut CliRenderer,
+  kind: *const std::os::raw::c_char,
+  kind_len: usize,
+  button: u32,
+  x: u32,
+  y: u32,
+  ctrl: bool,
+  shift: bool,
+  alt: bool,
+  scroll_dir: u32,
+) {
+  if renderer.is_null() || kind.is_null() {
+    return;
+  }
+  unsafe {
+    let kind_bytes = std::slice::from_raw_parts(kind as *const u8, kind_len);
+    let Ok(kind_str) = std::str::from_utf8(kind_bytes) else {
+      return;
+    };
+    (*renderer).inject_mouse_event(kind_str, button, x, y, ctrl, shift, alt, scroll_dir);
   }
 }
