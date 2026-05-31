@@ -1,3 +1,7 @@
+# Normalize text files to LF across platforms. This prevents Windows checkouts
+# with core.autocrlf=true from producing noisy CRLF warnings during commits.
+* text=auto eol=lf
+
 # Auto-generated files
 packages/core/src/ffi.ts linguist-generated=true
 packages/core/src/structs.ts linguist-generated=true
