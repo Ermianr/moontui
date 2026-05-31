@@ -175,6 +175,30 @@ The testing harness SHALL allow tests to assert deterministic output produced by
 - **THEN** the resize path SHALL mark layout dirty
 - **AND** a subsequent render SHALL reflect the recomputed layout
 
+### Requirement: Test harness verifies focus traversal
+The testing harness SHALL allow tests to verify keyboard focus traversal using mock key input.
+
+#### Scenario: Mock tab moves focus forward
+- **WHEN** a test renderer contains two focusable renderables and `mockKeys.pressTab()` is called
+- **THEN** focus SHALL move to the next focusable renderable
+
+#### Scenario: Mock shift tab moves focus backward
+- **WHEN** a test renderer contains two focusable renderables and `mockKeys.pressKey("Tab", { shift: true })` is called
+- **THEN** focus SHALL move to the previous focusable renderable
+
+### Requirement: Test harness verifies focused key dispatch
+The testing harness SHALL allow tests to verify that focused renderables receive key events before global key handlers.
+
+#### Scenario: Focused handler runs before global handler
+- **WHEN** a focused renderable has a key handler and the renderer has a global key listener
+- **AND** `mockKeys.pressKey("x")` is called
+- **THEN** the focused renderable handler SHALL run before the global listener
+
+#### Scenario: Stopped focused event skips global handler
+- **WHEN** a focused renderable key handler calls `stopPropagation()`
+- **AND** `mockKeys.pressKey("x")` is called
+- **THEN** the global key listener SHALL NOT be called
+
 ## Invariants
 
 - `createTestRenderer` never touches the real terminal. Even `restoreTerminal` is a no-op.
