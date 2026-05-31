@@ -210,3 +210,36 @@ FFI functions that return structs or multi-field records SHALL write into caller
 - **WHEN** a generated wrapper calls an FFI function
 - **THEN** the number and order of arguments SHALL match the `lib.symbols` definition
 - **AND** codegen SHALL fail or tests SHALL fail if the wrapper omits a required output pointer
+
+### Requirement: Layout FFI uses scalar batch buffers
+The layout FFI SHALL pass layout input and output using scalar batch buffers that are FFI-safe across Rust and TypeScript.
+
+#### Scenario: Layout input uses flat buffers
+- **WHEN** TypeScript sends a layout tree to native code
+- **THEN** node relationships, style values, and measured sizes SHALL be encoded in flat numeric buffers or FFI-safe structs
+- **AND** no JSON payload SHALL cross the FFI boundary
+
+#### Scenario: Layout output uses flat rectangles
+- **WHEN** native layout computation completes
+- **THEN** computed rectangles SHALL be returned as flat numeric buffers or FFI-safe structs
+- **AND** TypeScript SHALL map each rectangle back to its renderable
+
+### Requirement: Layout FFI avoids per-node calls
+The layout FFI SHALL avoid one native call per renderable during layout computation.
+
+#### Scenario: Single layout pass uses bounded FFI calls
+- **WHEN** a tree with many renderables is laid out through Taffy
+- **THEN** the layout pass SHALL use batched calls rather than calling native code once for each renderable
+
+### Requirement: Layout FFI validates buffer lengths
+Native layout FFI functions SHALL validate input and output buffer lengths before reading or writing.
+
+#### Scenario: Invalid input length fails safely
+- **WHEN** TypeScript passes inconsistent node, style, relationship, or measurement buffer lengths
+- **THEN** native layout computation SHALL return an error code
+- **AND** it SHALL NOT read beyond provided buffers
+
+#### Scenario: Output capacity is too small
+- **WHEN** the provided rectangle output buffer cannot hold all computed rectangles
+- **THEN** native layout computation SHALL return an error code
+- **AND** it SHALL NOT write beyond provided capacity
