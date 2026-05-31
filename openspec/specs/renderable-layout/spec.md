@@ -8,7 +8,7 @@ Declarative layout behavior for TypeScript renderables before drawing into a `Mo
 The system SHALL allow TypeScript renderables to declare layout behavior through engine-agnostic layout props.
 
 #### Scenario: Renderable is created with layout props
-- **WHEN** a renderable is created with `width`, `height`, `flexDirection`, `flexGrow`, `padding`, `margin`, or `gap`
+- **WHEN** a renderable is created with `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`, `flexDirection`, `flexGrow`, `flexShrink`, `flexBasis`, `alignItems`, `alignSelf`, `justifyContent`, `display`, `padding`, `margin`, `gap`, `position`, `left`, `right`, `top`, or `bottom`
 - **THEN** those values SHALL be stored as layout props on the renderable
 - **AND** no external layout engine type SHALL be exposed through the public API
 
@@ -78,3 +78,64 @@ The system SHALL produce deterministic integer terminal coordinates and dimensio
 - **WHEN** remaining space cannot be divided evenly among flexible children
 - **THEN** the extra cells SHALL be assigned in a deterministic order
 - **AND** repeated renders with the same inputs SHALL produce identical rectangles
+
+### Requirement: Layout contract defines supported prop semantics
+The system SHALL define deterministic terminal-cell semantics for each supported layout prop before a backend can claim support for it.
+
+#### Scenario: Unsupported layout prop is absent from public contract
+- **WHEN** a layout behavior has no documented requirement and test fixture
+- **THEN** it SHALL NOT be exposed as a supported public layout prop
+
+#### Scenario: Supported layout prop has fixture coverage
+- **WHEN** a layout prop is included in `LayoutProps`
+- **THEN** at least one contract test SHALL verify its computed rectangle behavior
+
+### Requirement: Intrinsic measurement participates in layout
+The system SHALL allow renderables with natural content size to provide intrinsic measurements to the layout engine.
+
+#### Scenario: Text measures terminal cell width
+- **WHEN** a text renderable has no explicit width
+- **THEN** its intrinsic width SHALL be based on terminal cell width for its content
+- **AND** it SHALL NOT rely only on JavaScript string length
+
+#### Scenario: Input measures value and placeholder
+- **WHEN** an input renderable has no explicit width
+- **THEN** its intrinsic width SHALL be based on the greater terminal cell width of its value and placeholder
+
+### Requirement: Geometry-affecting changes invalidate layout
+The system SHALL mark layout dirty when renderable state changes can alter computed rectangles.
+
+#### Scenario: Text content changes intrinsic size
+- **WHEN** a text renderable's content changes and its width or height depends on intrinsic measurement
+- **THEN** the renderable tree SHALL be marked layout-dirty
+
+#### Scenario: Input content changes intrinsic size
+- **WHEN** an input renderable's value or placeholder changes and its width depends on intrinsic measurement
+- **THEN** the renderable tree SHALL be marked layout-dirty
+
+#### Scenario: Style-only change preserves clean layout
+- **WHEN** a renderable changes color, focus state, or text attributes without changing geometry
+- **THEN** the renderable tree SHALL NOT be marked layout-dirty solely because of that change
+
+### Requirement: Display none removes layout and rendering participation
+The system SHALL support `display: "none"` for renderables that should not participate in layout or rendering.
+
+#### Scenario: Hidden child consumes no layout space
+- **WHEN** a flow child has `display: "none"`
+- **THEN** it SHALL receive no visible computed rectangle
+- **AND** sibling layout SHALL be computed as if the hidden child were absent
+
+#### Scenario: Hidden child does not render
+- **WHEN** a renderable has `display: "none"`
+- **THEN** it SHALL NOT draw itself or its children during the render pass
+
+### Requirement: Layout fixtures define backend parity
+The system SHALL maintain deterministic layout fixtures that define expected computed rectangles for supported layout behavior.
+
+#### Scenario: Contract fixture captures computed rectangles
+- **WHEN** a layout fixture is executed
+- **THEN** it SHALL assert the `x`, `y`, `width`, and `height` of relevant renderables
+
+#### Scenario: Clean frame reuses cached rectangles
+- **WHEN** no geometry-affecting input has changed since the previous render
+- **THEN** layout fixture execution SHALL verify that recomputation is skipped where observable by the test harness
