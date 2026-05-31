@@ -198,3 +198,28 @@ Native package and binary path resolution SHALL be delegated to the active platf
 - **WHEN** no backend can resolve a native package for the current runtime
 - **THEN** loading SHALL fail with an error that includes the runtime and platform identifier
 - **AND** the error SHALL NOT be caused by an unresolved runtime-specific import
+
+### Requirement: Agent runtime portability guidance distinguishes primary and experimental support
+`AGENTS.md` SHALL identify Bun as the primary development/runtime target and describe Node.js and Deno support according to the platform facade's current support level.
+
+#### Scenario: Bun is documented as primary
+- **WHEN** `AGENTS.md` describes JavaScript runtime support
+- **THEN** it SHALL state that Bun is the primary runtime for development commands and tests
+
+#### Scenario: Experimental runtimes are not overstated
+- **WHEN** `AGENTS.md` describes Node.js or Deno support
+- **THEN** it SHALL avoid presenting them as fully equivalent to Bun unless the implementation and tests prove parity
+- **AND** it SHALL direct shared library code through the platform facade instead of runtime-specific imports
+
+### Requirement: Agent FFI type guidance matches platform facade mappings
+`AGENTS.md` SHALL describe FFI scalar and pointer rules in a way that matches the platform facade and generated bindings.
+
+#### Scenario: Existing usize support is acknowledged
+- **WHEN** `AGENTS.md` gives guidance about `usize` across the FFI boundary
+- **THEN** it SHALL acknowledge existing platform/codegen support for `usize`
+- **AND** it SHALL warn agents not to introduce new public `usize` usage without confirming the platform facade and codegen mapping
+
+#### Scenario: Pointer rules use the platform facade
+- **WHEN** `AGENTS.md` describes pointer handling
+- **THEN** it SHALL require callbacks, pointer conversion, and pointer creation to go through the loaded library or platform facade
+- **AND** it SHALL prohibit direct runtime-specific FFI imports outside platform backend modules

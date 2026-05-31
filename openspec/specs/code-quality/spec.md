@@ -145,3 +145,29 @@ The PR template checklist SHALL list the actual project commands for formatting,
 #### Scenario: PR checklist matches project scripts
 - **WHEN** a developer reads the PR template checklist
 - **THEN** the checklist SHALL reference `bun run fmt`, `bun run fmt:check`, `bun run lint`, and `bun run test`
+
+### Requirement: Agent Rust unsafe guidance is scoped to FFI boundaries
+`AGENTS.md` SHALL prohibit casual unsafe Rust while allowing necessary unsafe code at explicit FFI boundaries under strict safeguards.
+
+#### Scenario: Unsafe ban is not absolute
+- **WHEN** `AGENTS.md` describes Rust unsafe policy
+- **THEN** it SHALL NOT claim the repository has no unsafe code if FFI wrappers require it
+- **AND** it SHALL state that unsafe is only acceptable in localized FFI/manual wrapper code or tests that require it
+
+#### Scenario: Unsafe FFI requires safeguards
+- **WHEN** `AGENTS.md` permits unsafe FFI code
+- **THEN** it SHALL require null checks or equivalent pointer validation before dereferencing raw pointers
+- **AND** it SHALL require `#[expect(unsafe_code)]` or a similarly explicit local lint expectation
+- **AND** it SHALL require a `SAFETY:` comment when the invariant is not obvious from nearby code
+
+### Requirement: Agent quality commands match project scripts
+`AGENTS.md` SHALL document validation commands using scripts that exist in the root package configuration.
+
+#### Scenario: TypeScript typecheck uses Bun script
+- **WHEN** `AGENTS.md` describes TypeScript typechecking
+- **THEN** it SHALL direct agents to use `bun run typecheck`
+- **AND** it SHALL NOT direct agents to invoke `tsc` directly as the primary workflow
+
+#### Scenario: Quality checklist avoids nonexistent commands
+- **WHEN** `AGENTS.md` lists formatting, linting, testing, or build commands
+- **THEN** each listed root command SHALL exist in `package.json`

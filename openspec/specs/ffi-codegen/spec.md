@@ -243,3 +243,24 @@ Generated TypeScript wrappers SHALL treat `u64` and `i64` values as `bigint` unl
 - **WHEN** a generated wrapper returns `u64`
 - **THEN** its TypeScript return type SHALL be `bigint`
 - **OR** the wrapper SHALL perform an explicit safe-range conversion before returning `number`
+
+### Requirement: Agent generated-file guidance lists all generated TypeScript artifacts
+`AGENTS.md` SHALL explicitly list generated TypeScript source artifacts that agents must not edit manually.
+
+#### Scenario: FFI generated files are listed
+- **WHEN** `AGENTS.md` lists generated files
+- **THEN** it SHALL include `packages/core/src/ffi.ts`
+- **AND** it SHALL include `packages/core/src/structs.ts`
+
+#### Scenario: Generated file edits route through source workflow
+- **WHEN** an agent needs to change generated FFI bindings
+- **THEN** `AGENTS.md` SHALL direct the agent to edit Rust annotations, manual wrapper metadata, or `scripts/generate-ffi.ts` as appropriate
+- **AND** it SHALL direct the agent to run `cargo build` followed by `bun run build:codegen`
+
+### Requirement: Agent codegen guidance covers manual FFI wrappers
+`AGENTS.md` SHALL explain that manual FFI wrapper behavior must be represented in schema/codegen inputs instead of being patched into generated files.
+
+#### Scenario: Manual wrapper changes update codegen source
+- **WHEN** an agent adds or changes a manual FFI wrapper
+- **THEN** `AGENTS.md` SHALL require the corresponding codegen metadata or script behavior to be updated
+- **AND** regenerated artifacts SHALL be produced by the codegen command rather than hand edits

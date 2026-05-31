@@ -1,360 +1,163 @@
 # Agent Guidelines for MoonTUI
 
-MoonTUI is a TUI library with a Rust core and TypeScript bindings, built on top of crossterm.
+MoonTUI is a hybrid Rust and TypeScript TUI library. The Rust core lives in `crates/moontui-core`, TypeScript bindings live in `packages/core`, shared TS config lives in `packages/config`, and demos live in `examples`.
 
-## Project Identity
-
-- **Rust core** (`crates/moontui-core`): Terminal manipulation, buffer, rendering, input handling
-- **TypeScript bindings** (`packages/core`): FFI layer and high-level TS API
-- **Shared config** (`packages/config`): Base TypeScript configuration
-- **Examples** (`examples/`): Demo applications
-
-This is a hybrid Rust + Bun monorepo managed with `bun` and `cargo`.
-
-## Conversational Style
-
-- Keep answers short and concise
-- No emojis in commits, issues, PR comments, code, or any agent output
-- Technical prose only; be kind but direct
+Use Bun as the primary JavaScript runtime and command runner. Use Cargo for Rust. Keep agent output technical, concise, and free of emojis.
 
 ## Evidence Rule
 
-Never assert that a function, module, behavior, or pattern exists without proof. Every claim about the codebase must be backed by the exact file path and line number, or a code snippet from the source. If the evidence cannot be produced, state that explicitly.
+Never assert that a function, module, behavior, command, or pattern exists without proof. Back every codebase claim with an exact file path and line number, or quote the relevant source snippet. If evidence cannot be produced, say that explicitly.
 
-## Build & Development Commands
+Read the full target file before broad edits, preserve user changes, and keep edits scoped to the requested change.
 
-### Rust
+## Canonical Workflows
 
-```bash
-cargo build                              # Build all crates
-cargo test                               # Run Rust tests
-cargo test -p moontui-core               # Test specific crate
-cargo fmt --all                          # Format Rust code
-cargo fmt --all -- --check               # Check formatting
-cargo clippy --workspace --all-targets -- --deny warnings  # Lint Rust
-```
-
-### TypeScript
+Root scripts are the source of truth for common repository commands.
 
 ```bash
-bun install                              # Install dependencies
-bun run build:ts                         # Build TS library only
-bun run build:native                     # Build native binary only
-bun run build:codegen                    # Generate FFI bindings
-bun run test:ts                          # Run TS tests
-bun run fmt:ts                           # Format TS code
-bun run fmt:ts:check                     # Check TS formatting
-bun run lint:ts                          # Lint TS code
-bun run typecheck                        # Typecheck core package (from repo root)
+bun install
+bun run build
+bun run build:ts
+bun run build:native
+bun run build:codegen
+bun run test
+bun run test:rust
+bun run test:ts
+bun run fmt
+bun run fmt:check
+bun run fmt:rust:check
+bun run fmt:ts:check
+bun run lint
+bun run lint:rust
+bun run lint:ts
+bun run check
+bun run typecheck
 ```
 
-### Combined
+Do not invoke `tsc` directly for routine typechecking. Use `bun run typecheck` from the repository root, or the package script when already working inside `packages/core`.
+
+When running examples or terminal apps, do not rely on visible `console.log` output. Reproduce issues in tests or ask the user for terminal output when interactive TUI behavior cannot be captured by the agent.
+
+## Generated Files
+
+Never edit generated or distributed artifacts directly:
+
+- `packages/core/dist/*`
+- `packages/core/native/*`
+- `packages/core/src/ffi.ts`
+- `packages/core/src/structs.ts`
+
+Generated FFI source files must be changed through Rust annotations, manual wrapper metadata, or `scripts/generate-ffi.ts`, then regenerated with:
 
 ```bash
-bun run build                            # Build all (Rust + TS)
-bun run test                             # Run all tests (Rust + TS)
-bun run fmt                              # Format all (Rust + TS)
-bun run fmt:check                        # Check all formatting
-bun run lint                             # Lint all (Rust + TS)
-bun run check                            # CI gate: fmt:check + lint
-bun run typecheck                        # Typecheck core package
-bun run clean                            # Remove build artifacts
+cargo build
+bun run build:codegen
 ```
 
-Always run `bun typecheck` from package directories (e.g., `packages/core`), never `tsc` directly.
+If a manual FFI wrapper changes, update the codegen source that emits the wrapper behavior. Do not patch generated output by hand.
 
-## Testing
+## Native Builds
 
-### Commands
+If any Rust code under `crates/moontui-core/` changes, rebuild the native package artifacts with:
 
 ```bash
-cargo test                               # Run Rust tests
-cargo test -p moontui-core               # Test specific crate
-bun run test:ts                          # Run TS tests
-bun run test                             # Run all tests
+bun run build:native
 ```
 
-### Conventions
+The native build script builds the host Rust library, copies it into `packages/core/native/<platform>/`, and generates the platform package under `packages/core/node_modules/@moontui/core-<platform>`. TypeScript examples and package resolution use those platform packages, not `target/debug`.
 
-**Rust:** Name tests descriptively (`buffer_should_handle_wide_characters`), one assertion per test when possible, integration tests in `crates/moontui-core/tests/`.
+Debug native artifacts are an explicit development choice; pass the build script's `--dev` option only when a debug native build is intentionally required.
 
-**TypeScript:** Use `bun test` from `packages/core`, tests co-located with source (`src/*.test.ts`), avoid mocks — test actual implementation.
+## FFI Rules
 
-### Principles
+The Rust core is built as `cdylib`, `staticlib`, and `lib`; public FFI data crossing the Rust and TypeScript boundary must stay FFI-safe.
 
-1. **Test the real pipeline, not just mocks.** If a harness bypasses a subsystem, add tests that exercise the real path.
-2. **Verify side effects in output.** When code produces output (ANSI, files, network), assert it appears in the destination.
-3. **Integration tests catch what unit tests miss.** Add integration tests for I/O features.
-4. **Don't trust the test harness.** Ask: "What subsystem is bypassed? What tests would catch bugs there?"
-5. **Test configuration end-to-end.** Verify options affect behavior, not just storage.
+- Use `#[repr(C)]` for public FFI structs and enums.
+- Prefer explicit scalar widths such as `u32`, `i32`, `u64`, and `i64` for new public FFI APIs.
+- Existing platform/codegen support maps `usize`, but do not add new public `usize` usage without checking the Rust declaration, generated schema, and platform facade mapping.
+- Marshal native booleans deliberately; shared TypeScript code should use generated `ffi.ts` helpers or platform facade helpers.
+- Route pointer creation, pointer conversion, callbacks, and dynamic library loading through `packages/core/src/platform/` or generated `ffi.ts`.
+- Do not import runtime-specific FFI modules such as `bun:ffi` or `node:ffi` from shared library code. Keep runtime-specific imports inside platform backend modules.
 
-### FFI Codegen Workflow
-
-The FFI boundary is auto-generated from Rust annotations. When adding new FFI functions:
-
-1. Add `#[moontui_export]` to the `impl` block in Rust
-2. Run `cargo build` to generate `target/moontui-schema.json`
-3. Run `bun run build:codegen` to generate `packages/core/src/ffi.ts` and `packages/core/src/structs.ts`
-4. The generated files are marked `DO NOT EDIT` — never edit them manually
-
-For complex functions (multi-pointer args, slice conversion, etc.), use `/// @ffi_manual` and keep the manual implementation in `lib.rs`.
-
-**IMPORTANT:** If you add manual FFI wrappers (e.g., callback trampolines in `scripts/generate-ffi.ts`), you MUST update the codegen script to include them. The script has hardcoded sections for `createEventCallback`, `createResizeCallback`, etc. — when adding new callback types, add the corresponding generation code to the script, otherwise it will be overwritten on the next `bun run build:codegen`.
+Unsafe Rust is prohibited for ordinary implementation code. It is acceptable only in localized FFI/manual wrapper code or tests that require it. Any unsafe FFI code must validate raw pointers before dereferencing, use an explicit local lint expectation such as `#[expect(unsafe_code)]` when applicable, and include a `SAFETY:` comment when the invariant is not obvious from nearby code.
 
 ## Runtime Portability
 
-Default to Bun for development, but generated code must work across Bun, Node.js, and Deno.
+Bun is the primary runtime for development commands, tests, and local execution. Node.js and Deno support are experimental unless a change includes implementation and tests that prove parity.
 
-- Use `bun test` for testing
-- Use `bun install` for dependency management
-- **Do not** use Bun-specific APIs (e.g., `Bun.file()`, `Bun.serve()`) in library code — use `node:fs/promises`, `node:path`, and other `node:` built-ins instead
-- Bun automatically loads `.env`, so don't use dotenv
-- When only changing TypeScript, you do NOT need to rebuild native code
+Shared TypeScript library code must avoid Bun-specific APIs such as `Bun.file()` and `Bun.serve()` outside platform backends and scripts. Use standard imports or the existing platform facade for runtime-dependent behavior.
 
-### Portable FFI Types
+## Rust Rules
 
-- Stay within the `node:ffi`/`bun:ffi` type intersection
-- Avoid backend-specific ABI names: no `usize`, `napi_env`, or `napi_value`; use explicit widths like `u32`/`u64`
-- Treat `i64`/`u64` as `bigint`, native booleans as `0`/`1`
-- For pointer params, pass `ptr(view)` explicitly; keep shared `Pointer` values as `number | bigint`
-- Create callbacks through the loaded library/platform facade, not `new JSCallback(...)`
+- No `unwrap()` or `expect()` outside tests.
+- No panicking on user input; fallible operations return `Result`.
+- No `dbg!`, `todo!`, `unimplemented!`, `println!`, or `eprintln!`.
+- Prefer `?` for error propagation and `thiserror` for library errors.
+- Use workspace dependencies from root `Cargo.toml`; no git dependencies in PRs.
+- Keep terminal state restorable on exit or panic.
+- Treat buffer operations and rendering as hot paths; avoid unnecessary allocation and cloning.
+- Use `#[expect(clippy::lint)]` with justification instead of broad `#[allow(...)]` when suppressing active Clippy lints.
 
-## Auto-generated Files
+Rust formatting and linting are governed by `rustfmt.toml` and root `Cargo.toml`.
 
-MANDATORY: NEVER edit these files directly.
+## TypeScript Rules
 
-- `packages/core/dist/*` — Built from `packages/core/src/` via build script
-- `packages/core/native/*` — Prebuilt native binaries
+- Avoid casual `any`; when an FFI cast needs it, keep the scope narrow and document it with the existing lint style.
+- Do not use Bun-specific APIs in shared library code outside platform/script contexts.
+- Prefer explicit imports grouped by built-ins, external dependencies, then internal modules.
+- Keep helpers close to the code they support and avoid extracting single-use abstractions unless they clarify complex validation.
+- Prefer `const`, early returns, and type guards that preserve downstream inference.
+- Use Bun test commands for tests and Bun scripts for formatting, linting, and typechecking.
 
-## CRITICAL: Native Rebuild After Rust Changes
+## Verification by Change Type
 
-If you change ANY Rust code in `crates/moontui-core/`, you MUST rebuild and redistribute the native binary. The TS examples load from `node_modules/@moontui/core-win32-x64/`, NOT from `target/debug/`. Skipping this means your changes have zero effect at runtime.
+Run the smallest set that covers the files changed, and report any commands not run.
+
+Rust changes under `crates/`:
 
 ```bash
-cargo build -p moontui-core
-Copy-Item target\debug\moontui_core.dll packages\core\native\moontui_core.dll -Force
-Copy-Item target\debug\moontui_core.dll packages\core\node_modules\@moontui\core-win32-x64\moontui_core.dll -Force
+bun run fmt:rust:check
+bun run lint:rust
+bun run test:rust
 ```
+
+Rust changes under `crates/moontui-core/` also require:
+
+```bash
+bun run build:native
+```
+
+TypeScript source changes under `packages/core/src/`:
+
+```bash
+bun run fmt:ts:check
+bun run lint:ts
+bun run test:ts
+bun run typecheck
+```
+
+FFI boundary changes:
+
+```bash
+cargo build
+bun run build:codegen
+bun run fmt:ts:check
+bun run lint:ts
+bun run test:ts
+bun run typecheck
+```
+
+Repository-wide or cross-language changes:
+
+```bash
+bun run check
+bun run test
+```
+
+Documentation-only changes usually do not require builds or tests. Still verify command names, generated-file claims, and workflow claims against source files before presenting them as facts.
 
 ## Commits and PR Titles
 
 Use conventional commit messages: `type(scope): summary`.
 
-Valid types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
-Scopes are optional; use the affected package or area when helpful: `core`, `ffi`, `buffer`, `renderer`, `input`.
-
-Examples:
-```
-fix(core): handle zero-width characters in buffer
-feat(renderer): add double-buffer diffing
-chore(ffi): regenerate native types
-refactor(buffer): simplify cell comparison
-```
-
----
-
-# Rust Style Guide
-
-## General Principles
-
-- **No `unwrap()`/`expect()`** outside tests — always handle errors with `thiserror` + `Result`
-- **No panicking on user input** — all fallible operations return `Result`
-- **No `unsafe` code** — enforced via `unsafe_code = "deny"` in workspace lints
-- **No `dbg!`, `todo!`, `unimplemented!`, `println!`, `eprintln!`** — all denied by workspace clippy config
-- Prefer `?` operator over match chains for error propagation
-- Use `thiserror` for library errors; `anyhow` is for application binaries and is not a dependency here
-
-## Borrowing & Ownership
-
-- Prefer `&T` over `.clone()` unless ownership transfer is required
-- Use `&str` over `String`, `&[T]` over `Vec<T>` in function parameters
-- Small `Copy` types (≤24 bytes) can be passed by value
-- Use `Cow<'_, T>` when a function may return either borrowed or owned data depending on conditions
-
-## Performance
-
-- Avoid cloning in loops; use `.iter()` instead of `.into_iter()` for Copy types
-- Prefer iterators over manual loops; avoid intermediate `.collect()` calls
-- Always benchmark with `--release` flag
-- Run `cargo clippy -- -D clippy::perf` for performance hints
-
-## Linting
-
-Workspace clippy config (`Cargo.toml`) enforces:
-- `pedantic` at warn level
-- `dbg_macro`, `todo`, `unimplemented`, `print_stdout`, `print_stderr` denied
-- `unsafe_code` denied
-
-Run: `cargo clippy --workspace --all-targets -- --deny warnings`
-
-Use `#[expect(clippy::lint)]` over `#[allow(...)]` with a justification comment. `#[expect]` causes a build error if the lint stops firing (e.g. after a Clippy version upgrade), which keeps suppressions relevant. If a Clippy update removes a lint, replace the stale `#[expect]` with `#[allow]` and document why.
-
-## Formatting
-
-Enforced by `rustfmt.toml`:
-- `style_edition = "2024"`, `tab_spaces = 2`
-- `use_field_init_shorthand = true`
-
-Run: `cargo fmt --all`
-
-## Documentation
-
-- `//` comments explain *why* (safety invariants, workarounds, design rationale)
-- `///` doc comments explain *what* and *how* for public APIs
-- Every `TODO` needs a linked issue: `// TODO(#42): ...`
-- Do not add comments for obvious code
-
-## Dependencies
-
-- Use workspace dependencies defined in root `Cargo.toml`
-- Use minor-compatible semver versions: `"0.29"` not `"0.29.0"` — `Cargo.lock` guarantees exact reproducibility; pinning patch versions in `Cargo.toml` blocks automatic bug-fix updates without any reproducibility benefit
-- No git dependencies in PRs
-- No copyleft-licensed dependencies; acceptable licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, CC0
-
-## Key Architectural Invariants
-
-- The Rust core is a `cdylib` + `staticlib` + `lib` — it must be FFI-safe
-- All public FFI types must use `#[repr(C)]`
-- Terminal state must be restorable on panic (use crossterm's terminal modes)
-- Buffer operations are the hot path — optimize for minimal allocations
-
----
-
-# TypeScript Style Guide
-
-## General Principles
-
-- Keep things in one function unless composable or reusable
-- Do not extract single-use helpers preemptively — inline the logic at the call site
-- Avoid the `any` type
-- Rely on type inference; avoid explicit type annotations unless necessary for exports, complex generics, or function return types where inference would be non-obvious
-- Prefer functional array methods (`flatMap`, `filter`, `map`) over `for` loops; use type guards on `filter` to maintain type inference downstream
-- Inline a value when it is used only once and the expression is short enough to remain readable; extract a named variable when it aids clarity or debugging
-
-```ts
-// Good — expression is short, used once
-const journal = JSON.parse(await readFile(join(dir, "journal.json"), "utf8"))
-
-// Also good — named variable aids clarity when expression is complex
-const journalPath = buildConfigPath(dir, env, "journal.json")
-const journal = JSON.parse(await readFile(journalPath, "utf8"))
-```
-
-## Destructuring
-
-Use destructuring when accessing multiple properties from the same object in the same scope. For a single property used once, dot notation is cleaner.
-
-```ts
-// Good — multiple properties, destructuring reduces repetition
-const { width, height, depth } = dimensions
-
-// Good — single property or different scopes, dot notation preserves context
-obj.name
-obj.value
-```
-
-## Variables
-
-Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.
-
-```ts
-// Good
-const foo = condition ? 1 : 2
-
-// Bad
-let foo
-if (condition) foo = 1
-else foo = 2
-```
-
-## Control Flow
-
-Avoid `else` statements. Prefer early returns.
-
-```ts
-// Good
-function foo() {
-  if (condition) return 1
-  return 2
-}
-
-// Bad
-function foo() {
-  if (condition) return 1
-  else return 2
-}
-```
-
-## Complex Logic
-
-When a function has several validation branches, make the main function read as the happy path and move supporting details into small helpers below it.
-
-```ts
-// Good
-export function loadThing(input: unknown) {
-  const config = requireConfig(input)
-  const metadata = readMetadata(input)
-  return createThing({ config, metadata })
-}
-
-function requireConfig(input: unknown) { ... }
-```
-
-- Keep helpers close to the code they support
-- Do not over-abstract simple expressions into many single-use helpers
-- Add comments for non-obvious constraints and surprising behavior, not for obvious control flow
-
-## Naming
-
-- `camelCase` for variables and functions
-- `PascalCase` for classes, interfaces, and types
-- `UPPER_CASE` for constants
-
-## Formatting & Linting
-
-Enforced by Biome via ultracite (`biome.jsonc`):
-- No semicolons
-- Strict TypeScript
-- Minimal comments, no JSDoc
-
-Run: `bun run fmt:ts:check` (check) / `bun run fmt:ts` (auto-fix)
-
-## Imports
-
-Use explicit imports, grouped by: built-ins, external deps, internal modules.
-
-## Debugging
-
-This is a terminal UI library. When running examples or apps built with it, you cannot see `console.log` output directly. Ask the user to run the example and provide the output. Reproduce issues in a test case before fixing. Do not guess — use debug logs to understand what is actually happening.
-
----
-
-# Common Pitfalls & Best Practices
-
-- **Check surrounding code for conventions** before adding new code — study existing patterns, naming, and architecture in the target file/directory
-- **Read files in full** before making wide-ranging changes; do not rely only on search snippets
-- **Batch multiple edits** when possible to minimize round trips
-- **Break large changes into tracked steps** — decompose substantial work into manageable subtasks
-- **Never edit auto-generated files** — edit the source and rebuild
-- **Wait for `cargo` commands to finish** before starting another one
-- **Avoid `cargo clean`** — it increases subsequent compile times
-- **FFI boundary is critical** — all types crossing Rust↔TS must be `#[repr(C)]` and portable
-- **Terminal state restoration** — always ensure the terminal is restored on exit/panic
-- **Performance matters** — this is a TUI library; buffer operations and rendering are hot paths
-
-## Quality Checklist
-
-Before committing:
-
-- [ ] Rust: `bun run fmt:rust:check` passes
-- [ ] Rust: `bun run lint:rust` passes
-- [ ] Rust: `bun run test:rust` passes
-- [ ] TypeScript: `bun run fmt:ts:check` passes
-- [ ] TypeScript: `bun run lint:ts` passes
-- [ ] TypeScript: `bun run test:ts` passes
-- [ ] TypeScript: `bun run typecheck` passes
-- [ ] No auto-generated files were edited
-- [ ] No `unwrap()`/`expect()` added outside tests
-- [ ] No `dbg!`/`todo!`/`unimplemented!` macros left in code
-- [ ] FFI types are `#[repr(C)]` and portable across runtimes
-- [ ] No Bun-specific APIs (`Bun.file`, `Bun.serve`, etc.) in library code
+Valid types: `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`.
