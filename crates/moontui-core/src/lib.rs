@@ -10,6 +10,7 @@ mod event_bridge;
 mod frame_stats;
 mod hit_grid;
 pub mod input;
+pub mod layout;
 mod output_sink;
 pub mod renderer;
 mod terminal;

@@ -16,5 +16,5 @@ crossterm.workspace = true
 thiserror.workspace = true
 unicode-width.workspace = true
 moontui-macros = { path = "../moontui-macros" }
-
+taffy.workspace = true
 
