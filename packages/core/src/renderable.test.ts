@@ -22,7 +22,12 @@ import {
   Text,
   TextRenderable,
 } from "./renderable";
-import { createSpy, createTestRenderer } from "./testing/index";
+import {
+  assertLayoutRect,
+  createCountingLayoutEngine,
+  createSpy,
+  createTestRenderer,
+} from "./testing/index";
 
 const white = { r: 255, g: 255, b: 255, a: 255 };
 const black = { r: 0, g: 0, b: 0, a: 255 };
@@ -191,6 +196,135 @@ test("layout applies padding margin gap percentage sizes and flex remainder", ()
     width: 9,
     height: 1,
   });
+});
+
+test("layout contract covers shrink basis min max alignment and display none", () => {
+  const root = new RootRenderable(30, 6);
+  const hidden = new BoxRenderable({ display: "none", width: 10, height: 3 });
+  const first = new BoxRenderable({
+    flexBasis: 12,
+    flexShrink: 1,
+    maxWidth: 8,
+    height: 1,
+    alignSelf: "center",
+  });
+  const second = new BoxRenderable({
+    flexBasis: 12,
+    flexShrink: 1,
+    maxWidth: 7,
+    minWidth: 7,
+    height: 2,
+    alignSelf: "end",
+  });
+
+  root.setLayoutProps({
+    flexDirection: "row",
+    alignItems: "start",
+    justifyContent: "center",
+  });
+  root.add(hidden).add(first).add(second);
+  root.computeLayout(30, 6);
+
+  expect(hidden.layoutComputed).toBe(false);
+  assertLayoutRect(first, { x: 7, y: 2, width: 8, height: 1 });
+  assertLayoutRect(second, { x: 15, y: 4, width: 7, height: 2 });
+});
+
+test("display none renderables do not draw themselves or children", () => {
+  const { buffer, destroy } = createBuffer();
+  const hidden = new BoxRenderable({ display: "none", width: 10, height: 3 });
+  hidden.add(Text({ content: "Hidden", foregroundColor: white }));
+
+  hidden.render(buffer);
+
+  expect(lineText(buffer, 0)).not.toContain("Hidden");
+  destroy();
+});
+
+test("intrinsic measurement uses terminal cell width for text and input", () => {
+  const ascii = Text({ content: "abc" });
+  const cjk = Text({ content: "界" });
+  const emoji = Text({ content: "🙂" });
+  const input = Input({ value: "ab", placeholder: "界界" });
+
+  expect(ascii._measureIntrinsicSize().width).toBe(3);
+  expect(cjk._measureIntrinsicSize().width).toBe(2);
+  expect(emoji._measureIntrinsicSize().width).toBe(2);
+  expect(input._measureIntrinsicSize().width).toBe(4);
+});
+
+test("intrinsic content changes mark layout dirty only when width is implicit", () => {
+  const root = new RootRenderable(20, 5);
+  const text = Text({ content: "a" });
+  const fixed = Text({ content: "a", width: 5 });
+  const input = Input({ value: "a", placeholder: "Name" });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(text).add(fixed).add(input);
+  root.computeLayout(20, 5);
+
+  text.content = "界";
+  expect(root.layoutDirty).toBe(true);
+  root.computeLayout(20, 5);
+
+  fixed.content = "longer";
+  expect(root.layoutDirty).toBe(false);
+
+  input.value = "abcdef";
+  expect(root.layoutDirty).toBe(true);
+  root.computeLayout(20, 5);
+  input.placeholder = "abcdefghi";
+  expect(root.layoutDirty).toBe(true);
+});
+
+test("style and focus state changes do not mark clean layout dirty", () => {
+  const root = new RootRenderable(20, 5);
+  const text = Text({ content: "a", focusable: true, foregroundColor: white });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(text);
+  root.computeLayout(20, 5);
+
+  text.foregroundColor = red;
+  text.attributes = ATTR_BOLD;
+  text._focus();
+
+  expect(root.layoutDirty).toBe(false);
+});
+
+test("removed children stop participating in later layout", () => {
+  const root = new RootRenderable(20, 5);
+  const first = new BoxRenderable({ height: 1 });
+  const second = new BoxRenderable({ height: 1 });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(first).add(second);
+  root.computeLayout(20, 5);
+  root.remove(first);
+  root.computeLayout(20, 5);
+
+  expect(first.layoutComputed).toBe(false);
+  expect(second.computedLayout.y).toBe(0);
+});
+
+test("clean and dirty frame layout recomputation is observable through harness", () => {
+  const layoutEngine = createCountingLayoutEngine();
+  const { renderer } = createTestRenderer({
+    width: 20,
+    height: 5,
+    layoutEngine,
+  });
+  const text = Text({ content: "a" });
+
+  renderer.root.setLayoutProps({ flexDirection: "column" });
+  renderer.root.add(text);
+  renderer.render();
+  renderer.render();
+  text.content = "abc";
+  renderer.render();
+
+  expect(layoutEngine.count()).toBe(2);
+  renderer.destroy();
 });
 
 test("absolute positioned children do not consume normal flow space", () => {

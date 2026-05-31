@@ -19,6 +19,7 @@
     "test": "cargo test && bun test --cwd packages/core",
     "test:rust": "cargo test",
     "test:ts": "bun test --cwd packages/core",
+    "benchmark:layout": "bun scripts/layout-benchmark.ts",
     "fmt": "cargo fmt --all && ultracite fix",
     "fmt:check": "cargo fmt --all -- --check && ultracite check",
     "fmt:rust": "cargo fmt --all",

@@ -8,6 +8,9 @@ export interface RenderContext {
 }
 
 export type LayoutDirection = "column" | "row";
+export type LayoutAlign = "center" | "end" | "start" | "stretch";
+export type LayoutDisplay = "flex" | "none";
+export type LayoutJustify = "center" | "end" | "space-between" | "start";
 export type LayoutPosition = "absolute" | "relative";
 export type LayoutSize = `${number}%` | number;
 
@@ -26,13 +29,23 @@ export interface LayoutRect {
 }
 
 export interface LayoutProps {
+  alignItems?: LayoutAlign;
+  alignSelf?: LayoutAlign;
   bottom?: number;
+  display?: LayoutDisplay;
+  flexBasis?: LayoutSize;
   flexDirection?: LayoutDirection;
   flexGrow?: number;
+  flexShrink?: number;
   gap?: number;
   height?: LayoutSize;
+  justifyContent?: LayoutJustify;
   left?: number;
   margin?: LayoutEdges | number;
+  maxHeight?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  minWidth?: number;
   padding?: LayoutEdges | number;
   position?: LayoutPosition;
   right?: number;
@@ -77,18 +90,28 @@ export class Renderable {
     this._onFocus = options.onFocus;
     this._onKey = options.onKey;
     this._layoutProps = {
+      alignItems: options.alignItems,
+      alignSelf: options.alignSelf,
       bottom: options.bottom,
+      display: options.display,
+      flexBasis: options.flexBasis,
       flexDirection: options.flexDirection,
       flexGrow: options.flexGrow,
+      flexShrink: options.flexShrink,
       gap: options.gap,
-      height: options.height ?? 0,
+      height: options.height,
       left: options.left,
       margin: options.margin,
+      maxHeight: options.maxHeight,
+      maxWidth: options.maxWidth,
+      minHeight: options.minHeight,
+      minWidth: options.minWidth,
       padding: options.padding,
       position: options.position,
+      justifyContent: options.justifyContent,
       right: options.right,
       top: options.top,
-      width: options.width ?? 0,
+      width: options.width,
     };
     this._usesLayoutProps = hasExplicitLayoutProps(options);
     this._computedLayout = {
@@ -206,6 +229,7 @@ export class Renderable {
       child._clearFocusedDeep();
       child._parent = null;
       this._children.splice(index, 1);
+      child._clearComputedLayout();
       this.markLayoutDirty();
     }
     return this;
@@ -252,6 +276,11 @@ export class Renderable {
   }
 
   /** @internal */
+  _setLayoutDirty(value: boolean): void {
+    this._layoutDirty = value;
+  }
+
+  /** @internal */
   _focus(): void {
     if (this._focused) {
       return;
@@ -288,6 +317,9 @@ export class Renderable {
     offsetY = 0,
     context?: RenderContext
   ): void {
+    if (this._layoutProps.display === "none") {
+      return;
+    }
     const x = this._hasComputedLayout
       ? this._computedLayout.x
       : offsetX + this.x;
@@ -298,6 +330,11 @@ export class Renderable {
     const childOffsetY = this._hasComputedLayout ? 0 : y;
     this.renderSelf(buffer, x, y, context);
     this.renderChildren(buffer, childOffsetX, childOffsetY, context);
+  }
+
+  /** @internal */
+  _measureIntrinsicSize(): LayoutRect {
+    return { x: 0, y: 0, width: 0, height: 0 };
   }
 
   protected renderSelf(
@@ -323,9 +360,18 @@ export class Renderable {
 
 function hasExplicitLayoutProps(props: Partial<LayoutProps>): boolean {
   return (
+    props.alignItems !== undefined ||
+    props.alignSelf !== undefined ||
+    props.display !== undefined ||
+    props.flexBasis !== undefined ||
     props.flexDirection !== undefined ||
     props.flexGrow !== undefined ||
+    props.flexShrink !== undefined ||
     props.gap !== undefined ||
+    props.minWidth !== undefined ||
+    props.minHeight !== undefined ||
+    props.maxWidth !== undefined ||
+    props.maxHeight !== undefined ||
     props.padding !== undefined ||
     props.margin !== undefined ||
     props.position !== undefined ||
@@ -355,6 +401,11 @@ function resolveSize(size: LayoutSize | undefined, parentSize: number): number {
   return 0;
 }
 
+function clampSize(size: number, min?: number, max?: number): number {
+  const minClamped = min === undefined ? size : Math.max(size, min);
+  return max === undefined ? minClamped : Math.min(minClamped, max);
+}
+
 function normalizeEdges(
   edges: LayoutEdges | number | undefined
 ): Required<LayoutEdges> {
@@ -369,8 +420,23 @@ function normalizeEdges(
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this keeps the small private layout pass local to renderables.
-function layoutTree(
+export interface LayoutEngine {
+  compute(root: RootRenderable, width: number, height: number): void;
+}
+
+export class TypeScriptLayoutEngine implements LayoutEngine {
+  compute(root: RootRenderable, width: number, height: number): void {
+    layoutTree(root, { x: 0, y: 0, width, height }, false);
+    root._markLayoutClean();
+  }
+}
+
+export const defaultLayoutEngine = new TypeScriptLayoutEngine();
+
+// Unsupported layout domains are intentionally absent from LayoutProps:
+// grid, transforms, wrapping, z-index layout semantics, and percentage margins.
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this small private pass defines the current TypeScript backend.
+export function layoutTree(
   node: Renderable,
   rect: LayoutRect,
   forceLayout: boolean
@@ -388,8 +454,9 @@ function layoutTree(
     return;
   }
 
-  const layoutChildren =
-    forceLayout || node.usesLayoutProps ? [...node.children] : explicitChildren;
+  const layoutChildren = (
+    forceLayout || node.usesLayoutProps ? [...node.children] : explicitChildren
+  ).filter((child) => child.layoutProps.display !== "none");
   const padding = normalizeEdges(node.layoutProps.padding);
   const content = {
     x: rect.x + padding.left,
@@ -399,6 +466,7 @@ function layoutTree(
   };
   const direction = node.layoutProps.flexDirection ?? "column";
   const gap = node.layoutProps.gap ?? 0;
+  const justifyContent = node.layoutProps.justifyContent ?? "start";
   const flowChildren = layoutChildren.filter(
     (child) => child.layoutProps.position !== "absolute"
   );
@@ -407,35 +475,83 @@ function layoutTree(
   );
   const mainSize = direction === "row" ? content.width : content.height;
   const crossSize = direction === "row" ? content.height : content.width;
-  const gapTotal = Math.max(0, flowChildren.length - 1) * gap;
-  const fixedTotal = flowChildren.reduce((total, child) => {
+  const gapTotal =
+    justifyContent === "space-between" && flowChildren.length > 1
+      ? 0
+      : Math.max(0, flowChildren.length - 1) * gap;
+  const baseSizes = flowChildren.map((child) => {
+    const intrinsic = child._measureIntrinsicSize();
+    const props = child.layoutProps;
+    const parentMain = direction === "row" ? content.width : content.height;
+    const intrinsicMain =
+      direction === "row" ? intrinsic.width : intrinsic.height;
+    const explicitMain =
+      direction === "row"
+        ? resolveSize(props.width, content.width)
+        : resolveSize(props.height, content.height);
+    const basis = resolveSize(props.flexBasis, parentMain);
+    return clampSize(
+      basis || explicitMain || intrinsicMain,
+      direction === "row" ? props.minWidth : props.minHeight,
+      direction === "row" ? props.maxWidth : props.maxHeight
+    );
+  });
+  const fixedTotal = flowChildren.reduce((total, child, index) => {
     const margin = normalizeEdges(child.layoutProps.margin);
     const mainMargin =
       direction === "row"
         ? margin.left + margin.right
         : margin.top + margin.bottom;
-    const size =
-      direction === "row"
-        ? resolveSize(child.layoutProps.width, content.width)
-        : resolveSize(child.layoutProps.height, content.height);
     return child.layoutProps.flexGrow
       ? total + mainMargin
-      : total + size + mainMargin;
+      : total + baseSizes[index] + mainMargin;
+  }, 0);
+  const baseTotal = flowChildren.reduce((total, child, index) => {
+    const margin = normalizeEdges(child.layoutProps.margin);
+    const mainMargin =
+      direction === "row"
+        ? margin.left + margin.right
+        : margin.top + margin.bottom;
+    return total + baseSizes[index] + mainMargin;
   }, 0);
   const flexTotal = flowChildren.reduce(
     (total, child) => total + (child.layoutProps.flexGrow ?? 0),
     0
   );
-  const remaining = Math.max(0, mainSize - fixedTotal - gapTotal);
-  let cursor = direction === "row" ? content.x : content.y;
+  const shrinkTotal = flowChildren.reduce(
+    (total, child) => total + (child.layoutProps.flexShrink ?? 1),
+    0
+  );
+  const freeSpace = mainSize - baseTotal - gapTotal;
+  const growRemaining = Math.max(0, mainSize - fixedTotal - gapTotal);
+  const usedSpace =
+    freeSpace < 0 ? mainSize : Math.min(mainSize, baseTotal + gapTotal);
+  let justifyOffset = 0;
+  if (justifyContent === "center") {
+    justifyOffset = Math.floor(Math.max(0, mainSize - usedSpace) / 2);
+  } else if (justifyContent === "end") {
+    justifyOffset = Math.max(0, mainSize - usedSpace);
+  }
+  const dynamicGap =
+    justifyContent === "space-between" && flowChildren.length > 1
+      ? Math.floor(
+          Math.max(0, mainSize - baseTotal) / (flowChildren.length - 1)
+        )
+      : gap;
+  let gapRemainder =
+    justifyContent === "space-between" && flowChildren.length > 1
+      ? Math.max(0, mainSize - baseTotal) % (flowChildren.length - 1)
+      : 0;
+  let cursor = (direction === "row" ? content.x : content.y) + justifyOffset;
   let flexIndex = 0;
   const flexChildren = flowChildren.filter(
     (child) => child.layoutProps.flexGrow
   );
 
-  for (const child of flowChildren) {
+  for (const [index, child] of flowChildren.entries()) {
     const margin = normalizeEdges(child.layoutProps.margin);
     const flexGrow = child.layoutProps.flexGrow ?? 0;
+    const flexShrink = child.layoutProps.flexShrink ?? 1;
     const mainMargin =
       direction === "row"
         ? margin.left + margin.right
@@ -445,38 +561,65 @@ function layoutTree(
         ? margin.top + margin.bottom
         : margin.left + margin.right;
     const flexBase =
-      flexTotal > 0 ? Math.floor((remaining * flexGrow) / flexTotal) : 0;
+      flexTotal > 0 ? Math.floor((growRemaining * flexGrow) / flexTotal) : 0;
     const remainder =
-      flexGrow > 0 && flexIndex < remaining % Math.max(1, flexChildren.length)
+      flexGrow > 0 &&
+      flexIndex < growRemaining % Math.max(1, flexChildren.length)
         ? 1
         : 0;
-    const fixedMain =
+    const shrink =
+      freeSpace < 0 && shrinkTotal > 0
+        ? Math.ceil((Math.abs(freeSpace) * flexShrink) / shrinkTotal)
+        : 0;
+    const main = clampSize(
+      flexGrow ? flexBase + remainder : baseSizes[index] - shrink,
       direction === "row"
-        ? resolveSize(child.layoutProps.width, content.width)
-        : resolveSize(child.layoutProps.height, content.height);
-    const main = flexGrow ? flexBase + remainder : fixedMain;
+        ? child.layoutProps.minWidth
+        : child.layoutProps.minHeight,
+      direction === "row"
+        ? child.layoutProps.maxWidth
+        : child.layoutProps.maxHeight
+    );
+    const intrinsic = child._measureIntrinsicSize();
+    const explicitCross =
+      direction === "row"
+        ? resolveSize(child.layoutProps.height, content.height)
+        : resolveSize(child.layoutProps.width, content.width);
+    const intrinsicCross =
+      direction === "row" ? intrinsic.height : intrinsic.width;
+    const align =
+      child.layoutProps.alignSelf ?? node.layoutProps.alignItems ?? "stretch";
     const cross =
-      direction === "row"
-        ? resolveSize(child.layoutProps.height, content.height) ||
-          crossSize - crossMargin
-        : resolveSize(child.layoutProps.width, content.width) ||
-          crossSize - crossMargin;
+      explicitCross ||
+      (align === "stretch"
+        ? crossSize - crossMargin
+        : intrinsicCross || crossSize - crossMargin);
+    let crossOffset = 0;
+    if (align === "center") {
+      crossOffset = Math.floor(
+        Math.max(0, crossSize - cross - crossMargin) / 2
+      );
+    } else if (align === "end") {
+      crossOffset = Math.max(0, crossSize - cross - crossMargin);
+    }
     const childRect =
       direction === "row"
         ? {
             x: cursor + margin.left,
-            y: content.y + margin.top,
+            y: content.y + margin.top + crossOffset,
             width: Math.max(0, main),
             height: Math.max(0, cross),
           }
         : {
-            x: content.x + margin.left,
+            x: content.x + margin.left + crossOffset,
             y: cursor + margin.top,
             width: Math.max(0, cross),
             height: Math.max(0, main),
           };
     layoutTree(child, childRect, true);
-    cursor += main + mainMargin + gap;
+    const nextGap = dynamicGap + (gapRemainder > 0 ? 1 : 0);
+    gapRemainder = Math.max(0, gapRemainder - 1);
+    cursor += main + mainMargin + nextGap;
     if (flexGrow > 0) {
       flexIndex++;
     }
@@ -513,6 +656,18 @@ export class RootRenderable extends Renderable {
   constructor(width: number, height: number) {
     super({ width, height });
   }
+
+  override computeLayout(
+    width = numericSize(this.width),
+    height = numericSize(this.height)
+  ): void {
+    defaultLayoutEngine.compute(this, width, height);
+  }
+
+  /** @internal */
+  _markLayoutClean(): void {
+    this._setLayoutDirty(false);
+  }
 }
 
 export interface TextRenderableOptions extends RenderableOptions {
@@ -525,21 +680,39 @@ export interface TextRenderableOptions extends RenderableOptions {
 export class TextRenderable extends Renderable {
   attributes?: number;
   backgroundColor?: RGBAInput;
-  content: string;
   foregroundColor: RGBAInput;
+  private _content: string;
 
   constructor(options: TextRenderableOptions) {
     super({
       ...options,
       x: options.x,
       y: options.y,
-      width: options.width ?? options.content.length,
+      width: options.width,
       height: options.height ?? 1,
     });
-    this.content = options.content;
+    this._content = options.content;
     this.foregroundColor = options.foregroundColor ?? terminalDefault();
     this.backgroundColor = options.backgroundColor;
     this.attributes = options.attributes;
+  }
+
+  get content(): string {
+    return this._content;
+  }
+
+  set content(value: string) {
+    if (value === this._content) {
+      return;
+    }
+    this._content = value;
+    if (this.layoutProps.width === undefined) {
+      this.markLayoutDirty();
+    }
+  }
+
+  override _measureIntrinsicSize(): LayoutRect {
+    return { x: 0, y: 0, width: terminalCellWidth(this._content), height: 1 };
   }
 
   protected override renderSelf(
@@ -623,9 +796,9 @@ export class InputRenderable extends Renderable {
   focusedBackgroundColor?: RGBAInput;
   foregroundColor: RGBAInput;
   maxLength?: number;
-  placeholder: string;
+  private _placeholder: string;
   placeholderColor: RGBAInput;
-  value: string;
+  private _value: string;
   private _cursorIndex: number;
   private _valueAtFocus: string;
   private readonly _onChange?: (value: string) => void;
@@ -638,12 +811,10 @@ export class InputRenderable extends Renderable {
       ...options,
       focusable: options.focusable ?? true,
       height: options.height ?? 1,
-      width:
-        options.width ??
-        Math.max(value.length, options.placeholder?.length ?? 0),
+      width: options.width,
     });
-    this.value = value;
-    this.placeholder = options.placeholder ?? "";
+    this._value = value;
+    this._placeholder = options.placeholder ?? "";
     this.maxLength = options.maxLength;
     this.foregroundColor = options.foregroundColor ?? terminalDefault();
     this.placeholderColor = options.placeholderColor ?? terminalDefault();
@@ -656,6 +827,46 @@ export class InputRenderable extends Renderable {
     this._onChange = options.onChange;
     this._onInput = options.onInput;
     this._onSubmit = options.onSubmit;
+  }
+
+  get placeholder(): string {
+    return this._placeholder;
+  }
+
+  set placeholder(value: string) {
+    if (value === this._placeholder) {
+      return;
+    }
+    this._placeholder = value;
+    if (this.layoutProps.width === undefined) {
+      this.markLayoutDirty();
+    }
+  }
+
+  get value(): string {
+    return this._value;
+  }
+
+  set value(value: string) {
+    if (value === this._value) {
+      return;
+    }
+    this._value = value;
+    if (this.layoutProps.width === undefined) {
+      this.markLayoutDirty();
+    }
+  }
+
+  override _measureIntrinsicSize(): LayoutRect {
+    return {
+      x: 0,
+      y: 0,
+      width: Math.max(
+        terminalCellWidth(this._value),
+        terminalCellWidth(this._placeholder)
+      ),
+      height: 1,
+    };
   }
 
   get cursorIndex(): number {
@@ -700,7 +911,9 @@ export class InputRenderable extends Renderable {
     context?: RenderContext
   ): void {
     const layout = this.computedLayout;
-    const width = this.layoutComputed ? layout.width : numericSize(this.width);
+    const width = this.layoutComputed
+      ? layout.width
+      : numericSize(this.width) || this._measureIntrinsicSize().width;
     const height = this.layoutComputed
       ? layout.height
       : numericSize(this.height);
@@ -797,6 +1010,37 @@ function isPrintableKey(event: KeyEvent): boolean {
   return (
     !(event.modifiers.ctrl || event.modifiers.alt) &&
     [...event.key].length === 1
+  );
+}
+
+export function terminalCellWidth(value: string): number {
+  let width = 0;
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint === undefined || codePoint === 0) {
+      continue;
+    }
+    if (codePoint < 32 || (codePoint >= 0x7f && codePoint < 0xa0)) {
+      continue;
+    }
+    width += isWideCodePoint(codePoint) ? 2 : 1;
+  }
+  return width;
+}
+
+function isWideCodePoint(codePoint: number): boolean {
+  return (
+    (codePoint >= 0x11_00 && codePoint <= 0x11_5f) ||
+    codePoint === 0x23_29 ||
+    codePoint === 0x23_2a ||
+    (codePoint >= 0x2e_80 && codePoint <= 0xa4_cf) ||
+    (codePoint >= 0xac_00 && codePoint <= 0xd7_a3) ||
+    (codePoint >= 0xf9_00 && codePoint <= 0xfa_ff) ||
+    (codePoint >= 0xfe_10 && codePoint <= 0xfe_19) ||
+    (codePoint >= 0xfe_30 && codePoint <= 0xfe_6f) ||
+    (codePoint >= 0xff_00 && codePoint <= 0xff_60) ||
+    (codePoint >= 0xff_e0 && codePoint <= 0xff_e6) ||
+    (codePoint >= 0x1_f3_00 && codePoint <= 0x1_fa_ff)
   );
 }
 
