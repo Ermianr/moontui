@@ -58,6 +58,31 @@ The system SHALL compute layout for the renderable tree before drawing layout-dr
 - **THEN** children added later SHALL render after children added earlier
 - **AND** later children SHALL be able to overwrite earlier output
 
+### Requirement: Tree mutations invalidate layout
+The system SHALL mark the renderable tree layout-dirty when child relationships change in a way that can affect layout.
+
+#### Scenario: Adding a child invalidates layout
+- **WHEN** `parent.add(child)` is called
+- **THEN** the root layout SHALL be marked dirty
+- **AND** the next render SHALL recompute layout before drawing
+
+#### Scenario: Removing a child invalidates layout
+- **WHEN** `parent.remove(child)` is called
+- **THEN** the root layout SHALL be marked dirty
+- **AND** the removed child SHALL NOT participate in subsequent layout computation
+
+### Requirement: Layout ordering follows render tree order
+The system SHALL use renderable child order as the deterministic order for layout flow and remainder assignment.
+
+#### Scenario: Flex remainder follows child order
+- **WHEN** remaining space cannot be evenly divided between flexible siblings
+- **THEN** extra cells SHALL be assigned according to deterministic child order
+
+#### Scenario: Reordered children recompute layout
+- **WHEN** child order changes through supported tree mutation APIs
+- **THEN** the root layout SHALL be marked dirty
+- **AND** flow positions SHALL reflect the new order on the next render
+
 ### Requirement: Manual coordinates remain usable
 The system SHALL preserve existing manual coordinate rendering behavior for renderables that do not opt into layout-driven positioning.
 

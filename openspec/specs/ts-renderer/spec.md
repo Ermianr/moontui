@@ -404,7 +404,7 @@ The `CliRenderer` render methods SHALL render the root tree into the next buffer
 - **THEN** the captured frame SHALL include the text renderable output
 
 ### Requirement: Renderer computes layout before root render
-The TypeScript renderer SHALL compute root renderable layout before drawing the root into the next buffer when layout is dirty.
+The TypeScript renderer SHALL compute root renderable layout through the internal layout engine boundary before drawing the root into the next buffer when layout is dirty.
 
 #### Scenario: Render invokes dirty layout pass
 - **WHEN** `CliRenderer.render()` is called after a layout prop changed
@@ -416,6 +416,11 @@ The TypeScript renderer SHALL compute root renderable layout before drawing the 
 - **THEN** the renderer SHALL skip layout recomputation
 - **AND** it SHALL render using cached computed rectangles
 
+#### Scenario: Renderer uses configured layout engine
+- **WHEN** the root layout is dirty
+- **THEN** the renderer SHALL invoke the configured internal layout engine
+- **AND** it SHALL NOT call backend-specific layout code from public renderable APIs
+
 ### Requirement: Direct buffer rendering remains available
 The `CliRenderer` class SHALL preserve the existing `getNextBuffer()` workflow for users who draw directly into `MoonBuffer`.
 
@@ -423,6 +428,14 @@ The `CliRenderer` class SHALL preserve the existing `getNextBuffer()` workflow f
 - **WHEN** user code calls `renderer.getNextBuffer().drawText(...)`
 - **AND** no children are added to `renderer.root`
 - **THEN** `renderer.render()` SHALL preserve the existing direct-buffer output behavior
+
+### Requirement: Renderer preserves direct buffer workflow
+The renderer SHALL preserve direct `MoonBuffer` drawing behavior while layout engine indirection is introduced.
+
+#### Scenario: Empty root keeps direct buffer output
+- **WHEN** user code draws directly into `renderer.getNextBuffer()`
+- **AND** no root children draw over that region
+- **THEN** the next render SHALL preserve the direct-buffer output behavior
 
 ### Requirement: Root dimensions track terminal size
 The `CliRenderer` class SHALL keep `renderer.root` dimensions synchronized with renderer width and height.

@@ -19,7 +19,12 @@ import {
   scrollDirectionFromNative,
 } from "./mouse";
 import type { FFICallbackInstance } from "./platform/types";
-import { type Renderable, RootRenderable } from "./renderable";
+import {
+  defaultLayoutEngine,
+  type LayoutEngine,
+  type Renderable,
+  RootRenderable,
+} from "./renderable";
 
 export interface RendererOptions {
   autoFocus?: boolean;
@@ -30,6 +35,10 @@ export interface RendererOptions {
   useAlternateScreen?: boolean;
   useMouse?: boolean;
   width?: number;
+}
+
+interface InternalRendererOptions extends RendererOptions {
+  layoutEngine?: LayoutEngine;
 }
 
 export interface RenderStats {
@@ -110,8 +119,9 @@ export class CliRenderer {
   private _autoFocus: boolean;
   private readonly _focusManager: FocusManager;
   private readonly _useAlternateScreen: boolean;
+  private readonly _layoutEngine: LayoutEngine;
 
-  constructor(options: RendererOptions = {}) {
+  constructor(options: InternalRendererOptions = {}) {
     const size = api.terminal.getTerminalSize();
     this._width = options.width ?? size.width;
     this._height = options.height ?? size.height;
@@ -119,6 +129,7 @@ export class CliRenderer {
     this._enableMouseMovement = options.enableMouseMovement ?? true;
     this._autoFocus = options.autoFocus ?? true;
     this._useAlternateScreen = options.useAlternateScreen ?? true;
+    this._layoutEngine = options.layoutEngine ?? defaultLayoutEngine;
     this._ptr = api.renderer.createRenderer(
       this._width,
       this._height,
@@ -266,7 +277,7 @@ export class CliRenderer {
   private doRender(force: boolean): void {
     this.guard();
     if (this.root.layoutDirty) {
-      this.root.computeLayout(this._width, this._height);
+      this._layoutEngine.compute(this.root, this._width, this._height);
     }
     this.root.render(this.getNextBuffer(), 0, 0, this);
     const result = api.renderer.render(this._ptr, force);

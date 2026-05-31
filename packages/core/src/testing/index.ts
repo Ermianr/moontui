@@ -1,12 +1,20 @@
 import type { CapturedFrame } from "../buffer";
 import { api } from "../ffi";
 import { buttonToNative, scrollDirectionToNative } from "../mouse";
+import {
+  defaultLayoutEngine,
+  type LayoutEngine,
+  type LayoutRect,
+  type Renderable,
+  type RootRenderable,
+} from "../renderable";
 import { CliRenderer, type RenderStats } from "../renderer";
 
 export interface TestRendererOptions {
   autoFocus?: boolean;
   height?: number;
   kittyKeyboard?: boolean;
+  layoutEngine?: LayoutEngine;
   useMouse?: boolean;
   width?: number;
 }
@@ -107,6 +115,10 @@ export interface Spy {
   (...args: any[]): void;
 }
 
+export interface CountingLayoutEngine extends LayoutEngine {
+  count(): number;
+}
+
 export function createSpy(): Spy {
   // biome-ignore lint/suspicious/noExplicitAny: spy captures arbitrary arguments
   const calls: any[][] = [];
@@ -130,6 +142,38 @@ export function createSpy(): Spy {
   return spy;
 }
 
+export function assertLayoutRect(
+  renderable: Renderable,
+  expected: LayoutRect
+): void {
+  const actual = renderable.computedLayout;
+  if (
+    actual.x !== expected.x ||
+    actual.y !== expected.y ||
+    actual.width !== expected.width ||
+    actual.height !== expected.height
+  ) {
+    throw new Error(
+      `Expected layout ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`
+    );
+  }
+}
+
+export function createCountingLayoutEngine(
+  engine: LayoutEngine = defaultLayoutEngine
+): CountingLayoutEngine {
+  let computeCount = 0;
+  return {
+    compute(root: RootRenderable, width: number, height: number) {
+      computeCount++;
+      engine.compute(root, width, height);
+    },
+    count() {
+      return computeCount;
+    },
+  };
+}
+
 export function createTestRenderer(
   options: TestRendererOptions = {}
 ): TestRendererSetup {
@@ -141,6 +185,7 @@ export function createTestRenderer(
     width,
     autoFocus: options.autoFocus,
     height,
+    layoutEngine: options.layoutEngine,
     useMouse: options.useMouse ?? true,
   });
 

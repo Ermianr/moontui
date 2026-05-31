@@ -175,6 +175,39 @@ The testing harness SHALL allow tests to assert deterministic output produced by
 - **THEN** the resize path SHALL mark layout dirty
 - **AND** a subsequent render SHALL reflect the recomputed layout
 
+### Requirement: Test harness exposes layout contract assertions
+The testing harness SHALL provide utilities or patterns for asserting computed layout rectangles without depending on a specific layout backend.
+
+#### Scenario: Test captures computed rectangles
+- **WHEN** a test renders a layout-driven tree
+- **THEN** it SHALL be able to assert the computed `x`, `y`, `width`, and `height` for selected renderables
+
+#### Scenario: Backend-neutral assertions
+- **WHEN** the same layout fixture runs against different internal layout backends
+- **THEN** the fixture SHALL assert public computed layout results rather than backend-specific node state
+
+### Requirement: Test harness supports layout invalidation checks
+The testing harness SHALL allow tests to observe whether clean frames skip layout recomputation and dirty frames recompute layout.
+
+#### Scenario: Dirty render recomputes layout
+- **WHEN** a geometry-affecting prop changes
+- **THEN** a test SHALL be able to verify that the next render recomputes layout
+
+#### Scenario: Clean render skips layout
+- **WHEN** no layout props, intrinsic content, tree structure, or renderer dimensions changed
+- **THEN** a test SHALL be able to verify that the next render reuses cached rectangles
+
+### Requirement: Layout benchmarks cover contract scenarios
+The repository SHALL include benchmark scenarios that measure layout behavior at realistic tree sizes before comparing layout backends.
+
+#### Scenario: Benchmark tree sizes
+- **WHEN** layout benchmarks run
+- **THEN** they SHALL include scenarios for approximately 100, 1,000, and 10,000 renderables
+
+#### Scenario: Benchmark mutation paths
+- **WHEN** layout benchmarks run
+- **THEN** they SHALL include clean-frame, single-prop mutation, child mutation, and renderer resize scenarios
+
 ### Requirement: Test harness verifies focus traversal
 The testing harness SHALL allow tests to verify keyboard focus traversal using mock key input.
 
