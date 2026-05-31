@@ -258,9 +258,10 @@ export function createTestRenderer(
       const buffer = renderer.getCurrentBuffer();
       const lines = buffer.getSpanLines();
       const cursor = renderer.getCursorPosition();
+      const size = renderer.terminalSize();
       return {
-        cols: width,
-        rows: height,
+        cols: size.width,
+        rows: size.height,
         cursor: [cursor.x, cursor.y] as [number, number],
         lines,
       };

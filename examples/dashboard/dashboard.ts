@@ -35,6 +35,8 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 
 class Dashboard {
   private renderer!: CliRenderer;
+  private leftColumn!: BoxRenderable;
+  private rightColumn!: BoxRenderable;
   private systemPanel!: BoxRenderable;
   private stylePanel!: BoxRenderable;
   private colorPanel!: BoxRenderable;
@@ -72,25 +74,46 @@ class Dashboard {
   }
 
   private setupRenderableTree(): void {
+    this.renderer.root.setLayoutProps({
+      flexDirection: "row",
+      padding: { top: 4, right: 1, bottom: 2, left: 1 },
+      gap: 1,
+    });
+    this.leftColumn = new BoxRenderable({
+      flexGrow: 1,
+      flexDirection: "column",
+      gap: 1,
+      backgroundColor: COLOR.surfaceBg,
+    });
+    this.rightColumn = new BoxRenderable({
+      flexGrow: 1,
+      flexDirection: "column",
+      gap: 1,
+      backgroundColor: COLOR.surfaceBg,
+    });
     this.systemPanel = new BoxRenderable({
+      height: 8,
       border: true,
       borderColor: COLOR.cyan,
       backgroundColor: COLOR.panelBg,
       title: " System Info ",
     });
     this.stylePanel = new BoxRenderable({
+      height: 8,
       border: true,
       borderColor: COLOR.yellow,
       backgroundColor: COLOR.panelBg,
       title: " Text Styles ",
     });
     this.colorPanel = new BoxRenderable({
+      flexGrow: 1,
       border: true,
       borderColor: COLOR.gray,
       backgroundColor: COLOR.panelBg,
       title: " Colors ",
     });
     this.statsPanel = new BoxRenderable({
+      flexGrow: 1,
       border: true,
       borderColor: COLOR.green,
       backgroundColor: COLOR.panelBg,
@@ -99,9 +122,12 @@ class Dashboard {
 
     this.systemLines = Array.from(
       { length: 4 },
-      () =>
+      (_, i) =>
         new TextRenderable({
           content: "",
+          position: "absolute",
+          left: 2,
+          top: 2 + i,
           foregroundColor: COLOR.white,
           backgroundColor: COLOR.panelBg,
         })
@@ -110,24 +136,36 @@ class Dashboard {
     this.styleLines = [
       new TextRenderable({
         content: "Bold text",
+        position: "absolute",
+        left: 2,
+        top: 2,
         foregroundColor: COLOR.white,
         backgroundColor: COLOR.panelBg,
         attributes: ATTR_BOLD,
       }),
       new TextRenderable({
         content: "Italic text",
+        position: "absolute",
+        left: 2,
+        top: 3,
         foregroundColor: COLOR.green,
         backgroundColor: COLOR.panelBg,
         attributes: ATTR_ITALIC,
       }),
       new TextRenderable({
         content: "Underline",
+        position: "absolute",
+        left: 2,
+        top: 4,
         foregroundColor: COLOR.yellow,
         backgroundColor: COLOR.panelBg,
         attributes: ATTR_UNDERLINE,
       }),
       new TextRenderable({
         content: "Bold+Italic",
+        position: "absolute",
+        left: 2,
+        top: 5,
         foregroundColor: COLOR.magenta,
         backgroundColor: COLOR.panelBg,
         // biome-ignore lint/suspicious/noBitwiseOperators: attribute flag combination
@@ -146,9 +184,12 @@ class Dashboard {
       COLOR.gray,
     ];
     this.colorSwatches = swatchColors.map(
-      (color) =>
+      (color, i) =>
         new TextRenderable({
           content: "██",
+          position: "absolute",
+          left: 2 + i * 2,
+          top: 2,
           foregroundColor: color,
           backgroundColor: COLOR.panelBg,
         })
@@ -156,9 +197,12 @@ class Dashboard {
 
     this.statsLines = Array.from(
       { length: 3 },
-      () =>
+      (_, i) =>
         new TextRenderable({
           content: "",
+          position: "absolute",
+          left: 2,
+          top: 2 + i,
           foregroundColor: COLOR.cyan,
           backgroundColor: COLOR.panelBg,
         })
@@ -181,11 +225,9 @@ class Dashboard {
       }
     }
 
-    this.renderer.root
-      .add(this.systemPanel)
-      .add(this.stylePanel)
-      .add(this.colorPanel)
-      .add(this.statsPanel);
+    this.leftColumn.add(this.systemPanel).add(this.colorPanel);
+    this.rightColumn.add(this.stylePanel).add(this.statsPanel);
+    this.renderer.root.add(this.leftColumn).add(this.rightColumn);
   }
 
   private shutdown(): void {
@@ -244,19 +286,6 @@ class Dashboard {
     buf.drawText(spinner, w - 2, statusY, COLOR.yellow, COLOR.statusBg);
     this.renderer.setCursorPosition(0, 0, false);
 
-    // --- Layout constants ---
-    const contentY = 4;
-    const panelH = Math.min(8, Math.floor((h - contentY - 2) / 2));
-    const gap = 1;
-    const leftColW = Math.floor(w * 0.45);
-    const rightColW = w - leftColW - gap - 2;
-
-    const p1x = 1;
-    const p1y = contentY;
-    this.systemPanel.x = p1x;
-    this.systemPanel.y = p1y;
-    this.systemPanel.width = leftColW;
-    this.systemPanel.height = panelH;
     const uptime = Math.floor((this.timer * 50) / 1000);
     const lines = [
       `Uptime: ${uptime}s`,
@@ -266,42 +295,16 @@ class Dashboard {
     ];
     lines.forEach((line, i) => {
       this.systemLines[i].content = line;
-      this.systemLines[i].x = 2;
-      this.systemLines[i].y = 2 + i;
     });
 
-    const p2x = leftColW + gap + 1;
-    const p2y = contentY;
-    this.stylePanel.x = p2x;
-    this.stylePanel.y = p2y;
-    this.stylePanel.width = rightColW;
-    this.stylePanel.height = panelH;
-    this.styleLines.forEach((line, i) => {
-      line.x = 2;
-      line.y = 2 + i;
-    });
-
-    const bottomPanelY = contentY + panelH + gap;
-
-    const p3x = 1;
-    const p3y = bottomPanelY;
-    const swatchCount = Math.min(this.colorSwatches.length, leftColW - 2);
-    this.colorPanel.x = p3x;
-    this.colorPanel.y = p3y;
-    this.colorPanel.width = leftColW;
-    this.colorPanel.height = 5;
+    const swatchCount = Math.min(
+      this.colorSwatches.length,
+      Math.max(0, this.colorPanel.computedLayout.width - 2)
+    );
     this.colorSwatches.forEach((swatch, i) => {
-      swatch.x = 2 + i * 2;
-      swatch.y = 2;
       swatch.content = i < swatchCount ? "██" : "";
     });
 
-    const p4x = leftColW + gap + 1;
-    const p4y = bottomPanelY;
-    this.statsPanel.x = p4x;
-    this.statsPanel.y = p4y;
-    this.statsPanel.width = rightColW;
-    this.statsPanel.height = 5;
     const stats = this.renderer.getStats();
     const statsLines = [
       `Frame time: ${stats.lastFrameTimeMs.toFixed(1)}ms`,
@@ -310,12 +313,10 @@ class Dashboard {
     ];
     statsLines.forEach((line, i) => {
       this.statsLines[i].content = line;
-      this.statsLines[i].x = 2;
-      this.statsLines[i].y = 2 + i;
     });
 
     // --- Animated progress bar ---
-    const progY = bottomPanelY + 6;
+    const progY = h - 3;
     const progW = w - 4;
     if (progY < h - 2 && progW > 4) {
       buf.drawText(" Progress:", 2, progY, COLOR.gray, COLOR.surfaceBg);

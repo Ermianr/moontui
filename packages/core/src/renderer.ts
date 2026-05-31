@@ -263,6 +263,9 @@ export class CliRenderer {
 
   private doRender(force: boolean): void {
     this.guard();
+    if (this.root.layoutDirty) {
+      this.root.computeLayout(this._width, this._height);
+    }
     this.root.render(this.getNextBuffer());
     const result = api.renderer.render(this._ptr, force);
     if (result !== 0) {

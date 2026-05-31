@@ -139,6 +139,90 @@ test("root renderable keeps renderer-sized dimensions", () => {
   expect(root.height).toBe(10);
 });
 
+test("column layout assigns fixed header and flexible body", () => {
+  const root = new RootRenderable(20, 10);
+  const header = new BoxRenderable({ height: 2 });
+  const body = new BoxRenderable({ flexGrow: 1 });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(header).add(body);
+  root.computeLayout(20, 10);
+
+  expect(header.computedLayout.height).toBe(2);
+  expect(body.computedLayout.y).toBe(2);
+  expect(body.computedLayout.height).toBe(8);
+});
+
+test("row layout assigns fixed sidebar and flexible content", () => {
+  const root = new RootRenderable(40, 8);
+  const sidebar = new BoxRenderable({ width: 10 });
+  const content = new BoxRenderable({ flexGrow: 1 });
+
+  root.setLayoutProps({ flexDirection: "row" });
+  root.add(sidebar).add(content);
+  root.computeLayout(40, 8);
+
+  expect(sidebar.computedLayout.width).toBe(10);
+  expect(content.computedLayout.x).toBe(10);
+  expect(content.computedLayout.width).toBe(30);
+});
+
+test("layout applies padding margin gap percentage sizes and flex remainder", () => {
+  const root = new RootRenderable(11, 10);
+  const half = new BoxRenderable({ width: "50%", height: 1, margin: 1 });
+  const firstFlex = new BoxRenderable({ flexGrow: 1 });
+  const secondFlex = new BoxRenderable({ flexGrow: 1 });
+
+  root.setLayoutProps({ flexDirection: "column", padding: 1, gap: 1 });
+  root.add(half).add(firstFlex).add(secondFlex);
+  root.computeLayout(11, 10);
+
+  expect(half.computedLayout).toEqual({ x: 2, y: 2, width: 4, height: 1 });
+  expect(firstFlex.computedLayout).toEqual({ x: 1, y: 5, width: 9, height: 2 });
+  expect(secondFlex.computedLayout).toEqual({
+    x: 1,
+    y: 8,
+    width: 9,
+    height: 1,
+  });
+});
+
+test("absolute positioned children do not consume normal flow space", () => {
+  const root = new RootRenderable(20, 5);
+  const absolute = new TextRenderable({
+    content: "A",
+    position: "absolute",
+    left: 5,
+    top: 1,
+  });
+  const flow = new TextRenderable({ content: "Flow" });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(absolute).add(flow);
+  root.computeLayout(20, 5);
+
+  expect(absolute.computedLayout.x).toBe(5);
+  expect(absolute.computedLayout.y).toBe(1);
+  expect(flow.computedLayout.x).toBe(0);
+  expect(flow.computedLayout.y).toBe(0);
+});
+
+test("layout-driven renderables draw from computed coordinates in insertion order", () => {
+  const { buffer, destroy } = createBuffer();
+  const root = new RootRenderable(20, 8);
+  const first = new TextRenderable({ content: "A", foregroundColor: white });
+  const second = new TextRenderable({ content: "B", foregroundColor: white });
+
+  root.setLayoutProps({ flexDirection: "column" });
+  root.add(first).add(second);
+  root.computeLayout(20, 8);
+  root.render(buffer);
+
+  expect(lineText(buffer, 0)?.startsWith("A")).toBe(true);
+  expect(lineText(buffer, 1)?.startsWith("B")).toBe(true);
+  destroy();
+});
+
 test("public API exports renderable symbols", () => {
   expect(PublicRenderable).toBe(Renderable);
   expect(PublicRootRenderable).toBe(RootRenderable);

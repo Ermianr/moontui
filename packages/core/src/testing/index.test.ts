@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Box, Text } from "../renderable";
 import { createTestRenderer } from "./index";
 
 const white = { r: 65_535, g: 65_535, b: 65_535, a: 65_535 };
@@ -108,6 +109,63 @@ test("captureSpans returns structured output", async () => {
   expect(spans.rows).toBe(5);
   expect(spans.lines.length).toBe(5);
 
+  renderer.destroy();
+});
+
+test("captured frames include layout-driven output", async () => {
+  const { renderer, renderOnce, captureCharFrame, captureSpans } =
+    await createTestRenderer({
+      width: 20,
+      height: 6,
+    });
+
+  renderer.root.setLayoutProps({ flexDirection: "column" });
+  renderer.root
+    .add(
+      Box(
+        { height: 3, padding: 1 },
+        Text({ content: "Head", foregroundColor: white })
+      )
+    )
+    .add(
+      Box({ flexGrow: 1 }, Text({ content: "Body", foregroundColor: white }))
+    );
+
+  await renderOnce();
+
+  const frame = captureCharFrame();
+  const spans = captureSpans();
+  expect(frame).toContain("Head");
+  expect(frame).toContain("Body");
+  expect(
+    spans.lines.some((line) => line.spans.some((span) => span.text === "Head"))
+  ).toBe(true);
+
+  renderer.destroy();
+});
+
+test("test harness resize invalidates layout and captured spans reflect new size", async () => {
+  const { renderer, resize, renderOnce, captureSpans } =
+    await createTestRenderer({
+      width: 20,
+      height: 6,
+    });
+  const body = Box(
+    { flexGrow: 1 },
+    Text({ content: "Body", foregroundColor: white })
+  );
+
+  renderer.root.setLayoutProps({ flexDirection: "column" });
+  renderer.root.add(Box({ height: 2 })).add(body);
+  await renderOnce();
+  expect(body.computedLayout.height).toBe(4);
+
+  resize(20, 10);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await renderOnce();
+
+  expect(body.computedLayout.height).toBe(8);
+  expect(captureSpans().rows).toBe(10);
   renderer.destroy();
 });
 

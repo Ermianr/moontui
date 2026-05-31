@@ -45,6 +45,26 @@ The system SHALL render each child at coordinates relative to its parent, accumu
 - **WHEN** a box at `(2, 1)` contains text at `(3, 2)`
 - **THEN** the text SHALL draw at absolute buffer coordinate `(5, 3)`
 
+### Requirement: Renderable tree participates in layout before drawing
+The system SHALL compute layout for the renderable tree before drawing layout-driven renderables into a `MoonBuffer`.
+
+#### Scenario: Nested layout applies before child render
+- **WHEN** a parent renderable lays out a child at computed coordinate `(4, 2)`
+- **THEN** the child SHALL render at that computed coordinate
+- **AND** children SHALL still render after their parent in deterministic order
+
+#### Scenario: Existing insertion order remains deterministic
+- **WHEN** multiple layout-driven children overlap in the same region
+- **THEN** children added later SHALL render after children added earlier
+- **AND** later children SHALL be able to overwrite earlier output
+
+### Requirement: Manual coordinates remain usable
+The system SHALL preserve existing manual coordinate rendering behavior for renderables that do not opt into layout-driven positioning.
+
+#### Scenario: Existing nested manual text still renders with accumulated offsets
+- **WHEN** a box at `(2, 1)` contains text at `(3, 2)` without layout-driven positioning
+- **THEN** the text SHALL draw at absolute buffer coordinate `(5, 3)`
+
 ### Requirement: TextRenderable draws styled text
 The system SHALL provide `TextRenderable` for drawing text content with foreground color, optional background color, and optional text attributes.
 
