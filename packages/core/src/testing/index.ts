@@ -7,6 +7,7 @@ import {
   type LayoutRect,
   type Renderable,
   type RootRenderable,
+  taffyLayoutEngine,
 } from "../renderable";
 import { CliRenderer, type RenderStats } from "../renderer";
 
@@ -119,6 +120,13 @@ export interface CountingLayoutEngine extends LayoutEngine {
   count(): number;
 }
 
+export type LayoutBackendName = "taffy" | "typescript";
+
+export interface LayoutBackendCase {
+  engine: LayoutEngine;
+  name: LayoutBackendName;
+}
+
 export function createSpy(): Spy {
   // biome-ignore lint/suspicious/noExplicitAny: spy captures arbitrary arguments
   const calls: any[][] = [];
@@ -172,6 +180,13 @@ export function createCountingLayoutEngine(
       return computeCount;
     },
   };
+}
+
+export function layoutBackendCases(): LayoutBackendCase[] {
+  return [
+    { name: "typescript", engine: defaultLayoutEngine },
+    { name: "taffy", engine: taffyLayoutEngine },
+  ];
 }
 
 export function createTestRenderer(

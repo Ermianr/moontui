@@ -263,6 +263,36 @@ The testing harness SHALL allow tests to verify cursor placement for focused inp
 - **WHEN** a focused input renders with cursor after the second character
 - **THEN** `captureSpans()` SHALL report the cursor position at the input coordinate plus two cells
 
+### Requirement: Test harness can run layout fixtures against selected backends
+The testing harness SHALL allow layout contract fixtures to run against the default TypeScript backend and the experimental Taffy backend.
+
+#### Scenario: Fixture runs against TypeScript backend
+- **WHEN** a layout fixture selects the TypeScript backend
+- **THEN** the fixture SHALL compute layout through the TypeScript backend
+
+#### Scenario: Fixture runs against Taffy backend
+- **WHEN** a layout fixture selects the Taffy backend
+- **THEN** the fixture SHALL compute layout through the Taffy backend
+
+### Requirement: Test harness compares backend parity
+The testing harness SHALL support parity tests that compare public computed rectangles between layout backends.
+
+#### Scenario: Parity test compares rectangles
+- **WHEN** a parity test runs a fixture against TypeScript and Taffy
+- **THEN** it SHALL compare public computed layout rectangles
+- **AND** it SHALL NOT inspect backend-specific node state
+
+### Requirement: Benchmark harness compares backend cost
+The benchmark harness SHALL compare total backend cost for TypeScript and Taffy layout backends.
+
+#### Scenario: Benchmark selects backend
+- **WHEN** a layout benchmark runs
+- **THEN** it SHALL be able to select TypeScript or Taffy backend for the same tree fixture
+
+#### Scenario: Benchmark covers scale and mutation paths
+- **WHEN** backend benchmarks run
+- **THEN** they SHALL include tree-size, clean-frame, resize, single-prop mutation, and child mutation scenarios
+
 ## Invariants
 
 - `createTestRenderer` never touches the real terminal. Even `restoreTerminal` is a no-op.

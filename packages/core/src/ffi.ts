@@ -89,6 +89,19 @@ const lib = backend.loadLibrary(libPath, {
     args: [FFIType.ptr, FFIType.ptr, FFIType.u64, FFIType.bool],
     returns: FFIType.u32,
   },
+  computeTaffyLayout: {
+    args: [
+      FFIType.ptr,
+      FFIType.u64,
+      FFIType.ptr,
+      FFIType.u64,
+      FFIType.ptr,
+      FFIType.u64,
+      FFIType.ptr,
+      FFIType.u64,
+    ],
+    returns: FFIType.i32,
+  },
   createRenderer: {
     args: [FFIType.u32, FFIType.u32, FFIType.bool],
     returns: FFIType.ptr,
@@ -413,6 +426,23 @@ export const api = {
     },
     width(p: Pointer<Renderer>): number {
       return lib.symbols.width(p);
+    },
+    computeTaffyLayout(
+      parentIndices: Int32Array,
+      styles: Float32Array,
+      measurements: Float32Array,
+      outRects: Float32Array
+    ): number {
+      return lib.symbols.computeTaffyLayout(
+        backend.ptr(parentIndices),
+        BigInt(parentIndices.length),
+        backend.ptr(styles),
+        BigInt(styles.length),
+        backend.ptr(measurements),
+        BigInt(measurements.length),
+        backend.ptr(outRects),
+        BigInt(outRects.length)
+      );
     },
     createRenderer(
       width: number,

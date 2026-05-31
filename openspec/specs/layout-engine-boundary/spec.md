@@ -34,3 +34,22 @@ Any future layout backend, including a Rust/Taffy backend, SHALL satisfy the sam
 #### Scenario: Backend benchmark includes synchronization cost
 - **WHEN** backend performance is benchmarked
 - **THEN** the benchmark SHALL include tree synchronization, layout computation, and computed rectangle propagation costs
+
+### Requirement: Layout boundary supports experimental backend selection
+The internal layout engine boundary SHALL support selecting the Taffy backend for tests and benchmarks without changing public renderable APIs.
+
+#### Scenario: Internal backend selector chooses Taffy
+- **WHEN** internal test or benchmark setup selects the Taffy layout backend
+- **THEN** root layout computation SHALL route through the Taffy backend
+
+#### Scenario: Public API hides backend selector
+- **WHEN** a normal consumer imports `@moontui/core`
+- **THEN** no public Taffy-specific backend selector SHALL be required to use layout
+
+### Requirement: Layout boundary applies backend rectangles to renderables
+The internal layout engine boundary SHALL apply computed rectangles from any backend to renderables through the same cached layout rectangle mechanism.
+
+#### Scenario: Taffy rectangles populate computed layout
+- **WHEN** the Taffy backend returns computed rectangles
+- **THEN** each corresponding renderable SHALL receive a cached computed layout rectangle
+- **AND** render methods SHALL read those cached rectangles the same way they do for the TypeScript backend

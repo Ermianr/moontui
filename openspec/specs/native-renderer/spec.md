@@ -167,6 +167,29 @@ The FFI SHALL expose a function to get capabilities from a renderer pointer.
 - **WHEN** `getCapabilities(ptr)` is called
 - **THEN** it SHALL return a struct with `rgb`, `ansi256`, and `ansi16` boolean fields
 
+### Requirement: Native core exposes experimental Taffy layout computation
+The native core SHALL expose an internal FFI entry point for computing layout with Taffy without coupling it to terminal rendering.
+
+#### Scenario: Native layout computation is independent of render flush
+- **WHEN** TypeScript requests Taffy layout computation
+- **THEN** native code SHALL compute layout rectangles without writing ANSI output
+- **AND** it SHALL NOT mutate renderer front or back buffers
+
+#### Scenario: Native layout returns error code
+- **WHEN** native Taffy layout computation cannot process the provided input
+- **THEN** it SHALL return an error code that TypeScript can detect
+
+### Requirement: Native Taffy integration does not change render semantics
+Adding Taffy layout support SHALL NOT change native buffer diffing or terminal output behavior.
+
+#### Scenario: Render output path remains unchanged
+- **WHEN** the TypeScript backend is selected
+- **THEN** native render behavior SHALL remain the existing buffer diff and ANSI output path
+
+#### Scenario: Taffy only affects computed rectangles
+- **WHEN** the Taffy backend is selected
+- **THEN** native Taffy computation SHALL only affect the computed rectangles used before drawing into the buffer
+
 ## Data Structures
 
 ### CliRenderer Fields (Encapsulated)

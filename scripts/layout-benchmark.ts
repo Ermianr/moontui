@@ -3,29 +3,44 @@ import {
   defaultLayoutEngine,
   type LayoutEngine,
   RootRenderable,
+  taffyLayoutEngine,
 } from "../packages/core/src/renderable";
 
-type Scenario = "child-mutation" | "clean-frame" | "resize" | "single-prop";
+type BackendName = "taffy" | "typescript";
+type Scenario =
+  | "child-mutation"
+  | "clean-frame"
+  | "full-recompute"
+  | "resize"
+  | "single-prop";
 
 const sizes = [100, 1000, 10_000] as const;
+const backends: { engine: LayoutEngine; name: BackendName }[] = [
+  { name: "typescript", engine: defaultLayoutEngine },
+  { name: "taffy", engine: taffyLayoutEngine },
+];
 const scenarios: Scenario[] = [
   "clean-frame",
+  "full-recompute",
   "single-prop",
   "child-mutation",
   "resize",
 ];
 
-for (const size of sizes) {
-  for (const scenario of scenarios) {
-    const result = benchmarkScenario(size, scenario, defaultLayoutEngine);
-    console.log(
-      [
-        `layout:${scenario}`,
-        `nodes=${size}`,
-        `syncAndComputeMs=${result.syncAndComputeMs.toFixed(3)}`,
-        `boundaryMs=${result.boundaryMs.toFixed(3)}`,
-      ].join(" ")
-    );
+for (const backend of backends) {
+  for (const size of sizes) {
+    for (const scenario of scenarios) {
+      const result = benchmarkScenario(size, scenario, backend.engine);
+      console.log(
+        [
+          `layout:${scenario}`,
+          `backend=${backend.name}`,
+          `nodes=${size}`,
+          `totalBackendMs=${result.totalBackendMs.toFixed(3)}`,
+          `cleanSkipMs=${result.cleanSkipMs.toFixed(3)}`,
+        ].join(" ")
+      );
+    }
   }
 }
 
@@ -33,15 +48,15 @@ function benchmarkScenario(
   size: number,
   scenario: Scenario,
   engine: LayoutEngine
-): { boundaryMs: number; syncAndComputeMs: number } {
+): { cleanSkipMs: number; totalBackendMs: number } {
   const root = createTree(size);
   engine.compute(root, 120, 40);
 
-  const boundaryStart = performance.now();
+  const cleanSkipStart = performance.now();
   if (!root.layoutDirty) {
     // Clean-frame benchmark intentionally measures the skip guard overhead.
   }
-  const boundaryMs = performance.now() - boundaryStart;
+  const cleanSkipMs = performance.now() - cleanSkipStart;
 
   mutate(root, scenario);
 
@@ -50,8 +65,8 @@ function benchmarkScenario(
     engine.compute(root, scenario === "resize" ? 160 : 120, 40);
   }
   return {
-    boundaryMs,
-    syncAndComputeMs: performance.now() - computeStart,
+    cleanSkipMs,
+    totalBackendMs: performance.now() - computeStart,
   };
 }
 
@@ -66,6 +81,10 @@ function createTree(size: number): RootRenderable {
 
 function mutate(root: RootRenderable, scenario: Scenario): void {
   if (scenario === "clean-frame") {
+    return;
+  }
+  if (scenario === "full-recompute") {
+    root.markLayoutDirty();
     return;
   }
   if (scenario === "single-prop") {

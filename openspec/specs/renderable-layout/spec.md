@@ -139,3 +139,31 @@ The system SHALL maintain deterministic layout fixtures that define expected com
 #### Scenario: Clean frame reuses cached rectangles
 - **WHEN** no geometry-affecting input has changed since the previous render
 - **THEN** layout fixture execution SHALL verify that recomputation is skipped where observable by the test harness
+
+### Requirement: Taffy layout preserves finalized layout contract
+The Taffy backend SHALL preserve the finalized renderable layout contract for supported props.
+
+#### Scenario: Flow layout parity
+- **WHEN** row, column, flex grow, flex shrink, flex basis, min/max size, padding, margin, gap, and alignment fixtures run with Taffy
+- **THEN** public computed rectangles SHALL match the layout contract expectations
+
+#### Scenario: Absolute layout parity
+- **WHEN** absolute positioning fixtures run with Taffy
+- **THEN** absolute children SHALL not consume flow space
+- **AND** their public computed rectangles SHALL match the layout contract expectations
+
+#### Scenario: Display none parity
+- **WHEN** a renderable has `display: "none"` and layout runs with Taffy
+- **THEN** it SHALL not consume layout space
+- **AND** it SHALL not render output
+
+### Requirement: Taffy layout uses precomputed intrinsic measurements
+The Taffy backend SHALL receive intrinsic measurements from TypeScript for text-like renderables during the experimental implementation.
+
+#### Scenario: Text intrinsic measurement is sent to Taffy
+- **WHEN** a text renderable has no explicit width
+- **THEN** the Taffy backend SHALL receive the renderable's terminal-cell intrinsic width as layout input
+
+#### Scenario: Input intrinsic measurement is sent to Taffy
+- **WHEN** an input renderable has no explicit width
+- **THEN** the Taffy backend SHALL receive the greater terminal-cell width of its value and placeholder as layout input
