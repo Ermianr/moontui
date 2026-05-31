@@ -439,3 +439,41 @@ The TypeScript renderer SHALL mark root layout dirty when the renderer dimension
 - **WHEN** a resize event updates the renderer size from 80 by 24 to 100 by 30
 - **THEN** the root renderable dimensions SHALL update
 - **AND** the next render SHALL recompute layout using 100 by 30
+
+### Requirement: CliRenderer exposes focus control API
+The TypeScript renderer SHALL expose a small public API for focus management.
+
+#### Scenario: Public focus methods exist
+- **WHEN** a consumer uses `CliRenderer`
+- **THEN** it SHALL provide `focus(renderable)`, `blur()`, `focusNext()`, `focusPrevious()`, and `focused`
+
+#### Scenario: Focus rejects non-focusable renderable
+- **WHEN** `renderer.focus(renderable)` is called with a non-focusable renderable
+- **THEN** the renderer SHALL NOT focus that renderable
+- **AND** the current focused renderable SHALL remain unchanged
+
+### Requirement: CliRenderer routes key events through focus manager
+The TypeScript renderer SHALL route native key events through the focus manager before emitting global key events.
+
+#### Scenario: Native key dispatches to focused renderable first
+- **WHEN** the native key callback fires and a renderable is focused
+- **THEN** the focus manager SHALL dispatch the key event to the focused renderable before `renderer.on("key")` handlers run
+
+#### Scenario: Unfocused key still emits globally
+- **WHEN** the native key callback fires and no renderable is focused
+- **THEN** `renderer.on("key")` handlers SHALL receive the key event
+
+#### Scenario: Stopped key is not emitted globally
+- **WHEN** focused key handling calls `stopPropagation()`
+- **THEN** `renderer.on("key")` handlers SHALL NOT receive the key event
+
+### Requirement: CliRenderer autoFocus option drives initial focus
+The TypeScript renderer SHALL use `RendererOptions.autoFocus` to decide whether the first focusable renderable can be focused automatically.
+
+#### Scenario: Auto focus true focuses first focusable
+- **WHEN** `autoFocus` is true and a focusable renderable exists in the root tree
+- **THEN** the renderer SHALL focus the first focusable renderable before focused key dispatch is needed
+
+#### Scenario: Auto focus false leaves focus empty
+- **WHEN** `autoFocus` is false
+- **THEN** the renderer SHALL leave `focused` as `null` until focus is set explicitly

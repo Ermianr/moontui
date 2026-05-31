@@ -106,3 +106,38 @@ The system SHALL export renderable classes and construct helpers from `@moontui/
 #### Scenario: Public import path
 - **WHEN** a consumer imports `Renderable`, `RootRenderable`, `TextRenderable`, `BoxRenderable`, `Text`, or `Box` from `@moontui/core`
 - **THEN** the symbols SHALL resolve from the package public API
+
+### Requirement: Renderables expose focus state and lifecycle hooks
+The system SHALL allow renderables to opt into focus management and observe focus lifecycle changes.
+
+#### Scenario: Focusable renderable is created
+- **WHEN** a renderable is created with `focusable: true`
+- **THEN** it SHALL be eligible for renderer focus traversal
+- **AND** its initial `focused` state SHALL be false
+
+#### Scenario: Non-focusable renderable is skipped
+- **WHEN** a renderable is created without `focusable: true`
+- **THEN** it SHALL NOT be eligible for renderer focus traversal
+
+#### Scenario: Focus lifecycle callbacks are configured
+- **WHEN** a renderable is created with focus and blur callbacks
+- **THEN** the renderer SHALL call those callbacks when the renderable gains or loses focus
+
+### Requirement: Focused renderables can handle key events
+The system SHALL allow focused renderables to receive key events through a renderable-level key handler.
+
+#### Scenario: Key handler receives event
+- **WHEN** a focusable renderable is focused and has a key handler
+- **THEN** the key handler SHALL receive key events routed by the renderer focus manager
+
+#### Scenario: Key handler can stop propagation
+- **WHEN** the renderable key handler calls `stopPropagation()` on the key event
+- **THEN** the renderer SHALL treat the event as stopped for global key dispatch
+
+### Requirement: Removed focused renderable loses focus
+The system SHALL clear or move focus when the currently focused renderable is removed from the renderable tree.
+
+#### Scenario: Focused child is removed
+- **WHEN** a focused renderable is removed from its parent
+- **THEN** that renderable SHALL no longer be focused
+- **AND** the renderer SHALL NOT dispatch future key events to it
