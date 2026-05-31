@@ -403,6 +403,19 @@ The `CliRenderer` render methods SHALL render the root tree into the next buffer
 - **AND** `renderer.renderForce()` is called
 - **THEN** the captured frame SHALL include the text renderable output
 
+### Requirement: Renderer computes layout before root render
+The TypeScript renderer SHALL compute root renderable layout before drawing the root into the next buffer when layout is dirty.
+
+#### Scenario: Render invokes dirty layout pass
+- **WHEN** `CliRenderer.render()` is called after a layout prop changed
+- **THEN** the renderer SHALL compute layout for the root renderable before calling native render
+- **AND** renderables SHALL draw using the updated computed rectangles
+
+#### Scenario: Render skips clean layout pass
+- **WHEN** `CliRenderer.render()` is called and layout is not dirty
+- **THEN** the renderer SHALL skip layout recomputation
+- **AND** it SHALL render using cached computed rectangles
+
 ### Requirement: Direct buffer rendering remains available
 The `CliRenderer` class SHALL preserve the existing `getNextBuffer()` workflow for users who draw directly into `MoonBuffer`.
 
@@ -418,3 +431,11 @@ The `CliRenderer` class SHALL keep `renderer.root` dimensions synchronized with 
 - **WHEN** the renderer receives a resize event with width `120` and height `40`
 - **THEN** `renderer.root.width` SHALL be `120`
 - **AND** `renderer.root.height` SHALL be `40`
+
+### Requirement: Resize invalidates root layout
+The TypeScript renderer SHALL mark root layout dirty when the renderer dimensions change.
+
+#### Scenario: Resize recomputes responsive layout
+- **WHEN** a resize event updates the renderer size from 80 by 24 to 100 by 30
+- **THEN** the root renderable dimensions SHALL update
+- **AND** the next render SHALL recompute layout using 100 by 30

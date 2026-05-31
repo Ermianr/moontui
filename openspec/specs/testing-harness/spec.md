@@ -163,6 +163,18 @@ test("mouse click dispatches to registered widget", async () => {
     - **WHEN** `mockMouse.scroll(5, 3, "up")` is called
     - **THEN** the native `inject_mouse_event` SHALL be called with kind="scroll", scroll_dir=1
 
+### Requirement: Test harness verifies layout-driven output
+The testing harness SHALL allow tests to assert deterministic output produced by layout-driven renderables.
+
+#### Scenario: Captured frame reflects computed layout
+- **WHEN** a test renderer renders a layout-driven tree with a header and flexible body
+- **THEN** `captureCharFrame()` and `captureSpans()` SHALL reflect text and box output at computed layout coordinates
+
+#### Scenario: Test resize exercises layout invalidation
+- **WHEN** `testHarness.resize(width, height)` is called for a layout-driven tree
+- **THEN** the resize path SHALL mark layout dirty
+- **AND** a subsequent render SHALL reflect the recomputed layout
+
 ## Invariants
 
 - `createTestRenderer` never touches the real terminal. Even `restoreTerminal` is a no-op.
