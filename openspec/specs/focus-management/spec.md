@@ -69,6 +69,14 @@ The system SHALL dispatch key events to the focused renderable before global ren
 - **WHEN** the focused renderable calls `stopPropagation()` on a key event
 - **THEN** global renderer key listeners SHALL NOT receive that key event
 
+### Requirement: Focused input receives editing keys through focus manager
+The focus manager SHALL route key events to focused input renderables using the existing focused key dispatch behavior.
+
+#### Scenario: Focused input edits from routed key
+- **WHEN** an input renderable is focused
+- **AND** key `"x"` is dispatched through the focus manager
+- **THEN** the input SHALL handle the key before global renderer key listeners
+
 ### Requirement: Auto focus can select first focusable renderable
 The system SHALL use renderer auto-focus behavior to focus the first focusable renderable when appropriate.
 
@@ -80,6 +88,14 @@ The system SHALL use renderer auto-focus behavior to focus the first focusable r
 #### Scenario: Auto focus disabled
 - **WHEN** `RendererOptions.autoFocus` is false
 - **THEN** the renderer SHALL NOT automatically focus the first focusable renderable
+
+### Requirement: Input renderables work with focus traversal
+Input renderables SHALL participate in existing focus traversal because they are focusable by default.
+
+#### Scenario: Tab reaches input
+- **WHEN** the renderable tree contains an input renderable after another focusable renderable
+- **AND** `renderer.focusNext()` is called from the previous renderable
+- **THEN** the input SHALL become focused
 
 ### Requirement: Focus lifecycle fires in deterministic order
 The system SHALL provide focus and blur lifecycle hooks for renderables.

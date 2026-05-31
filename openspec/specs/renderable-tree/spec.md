@@ -88,6 +88,14 @@ The system SHALL provide `BoxRenderable` for drawing filled rectangles with opti
 - **THEN** it SHALL draw its own box first
 - **AND** it SHALL render child renderables after drawing itself
 
+### Requirement: Input renderables participate in the renderable tree
+The system SHALL allow input renderables to be composed as children of existing renderables.
+
+#### Scenario: Box contains input
+- **WHEN** a `BoxRenderable` contains an `InputRenderable`
+- **THEN** the input SHALL render during the box child render pass
+- **AND** it SHALL participate in layout like other renderables
+
 ### Requirement: Construct helpers create renderables
 The system SHALL provide `Text(...)` and `Box(...)` helper functions that create corresponding renderable instances.
 
@@ -100,12 +108,20 @@ The system SHALL provide `Text(...)` and `Box(...)` helper functions that create
 - **THEN** it SHALL return a `BoxRenderable`
 - **AND** `childA` and `childB` SHALL be added as children in argument order
 
+#### Scenario: Input helper creates InputRenderable
+- **WHEN** `Input({ placeholder: "Name" })` is called
+- **THEN** it SHALL return an `InputRenderable`
+
 ### Requirement: Renderable API is exported publicly
 The system SHALL export renderable classes and construct helpers from `@moontui/core`.
 
 #### Scenario: Public import path
 - **WHEN** a consumer imports `Renderable`, `RootRenderable`, `TextRenderable`, `BoxRenderable`, `Text`, or `Box` from `@moontui/core`
 - **THEN** the symbols SHALL resolve from the package public API
+
+#### Scenario: Public input import path
+- **WHEN** a consumer imports `InputRenderable`, `InputRenderableOptions`, or `Input` from `@moontui/core`
+- **THEN** those symbols SHALL resolve from the package public API
 
 ### Requirement: Renderables expose focus state and lifecycle hooks
 The system SHALL allow renderables to opt into focus management and observe focus lifecycle changes.

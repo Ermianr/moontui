@@ -268,7 +268,7 @@ export class CliRenderer {
     if (this.root.layoutDirty) {
       this.root.computeLayout(this._width, this._height);
     }
-    this.root.render(this.getNextBuffer());
+    this.root.render(this.getNextBuffer(), 0, 0, this);
     const result = api.renderer.render(this._ptr, force);
     if (result !== 0) {
       throw new Error("render I/O error: stdout pipe closed");

@@ -1,6 +1,15 @@
-import { Box, CliRenderer, rgb, Text, terminalDefault } from "@moontui/core";
+import {
+  Box,
+  CliRenderer,
+  Input,
+  rgb,
+  Text,
+  terminalDefault,
+} from "@moontui/core";
 
 const white = rgb(255, 255, 255, 255);
+const dim = rgb(120, 120, 120, 255);
+const focused = rgb(24, 32, 48, 255);
 const background = terminalDefault();
 
 const renderer = new CliRenderer();
@@ -25,10 +34,21 @@ renderer.root.add(
       foregroundColor: white,
       backgroundColor: background,
     }),
+    Input({
+      x: 2,
+      y: 3,
+      width: 24,
+      placeholder: "Type your name",
+      foregroundColor: white,
+      placeholderColor: dim,
+      backgroundColor: background,
+      focusedBackgroundColor: focused,
+      onInput: () => draw(),
+    }),
     Text({
       x: 2,
       y: 4,
-      content: "Press any key to exit...",
+      content: "Press Esc to exit...",
       foregroundColor: white,
       backgroundColor: background,
     })
@@ -49,7 +69,10 @@ function draw() {
 
 draw();
 
-renderer.on("key", () => {
+renderer.on("key", (event) => {
+  if (event.key !== "esc") {
+    return;
+  }
   shutdown();
   process.exit(0);
 });

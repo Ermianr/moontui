@@ -3,6 +3,10 @@ import type { KeyEvent } from "./renderer";
 import type { RGBAInput } from "./rgba";
 import { terminalDefault } from "./rgba";
 
+export interface RenderContext {
+  setCursorPosition(x: number, y: number, visible: boolean): void;
+}
+
 export type LayoutDirection = "column" | "row";
 export type LayoutPosition = "absolute" | "relative";
 export type LayoutSize = `${number}%` | number;
@@ -278,7 +282,12 @@ export class Renderable {
     }
   }
 
-  render(buffer: MoonBuffer, offsetX = 0, offsetY = 0): void {
+  render(
+    buffer: MoonBuffer,
+    offsetX = 0,
+    offsetY = 0,
+    context?: RenderContext
+  ): void {
     const x = this._hasComputedLayout
       ? this._computedLayout.x
       : offsetX + this.x;
@@ -287,17 +296,27 @@ export class Renderable {
       : offsetY + this.y;
     const childOffsetX = this._hasComputedLayout ? 0 : x;
     const childOffsetY = this._hasComputedLayout ? 0 : y;
-    this.renderSelf(buffer, x, y);
-    this.renderChildren(buffer, childOffsetX, childOffsetY);
+    this.renderSelf(buffer, x, y, context);
+    this.renderChildren(buffer, childOffsetX, childOffsetY, context);
   }
 
-  protected renderSelf(_buffer: MoonBuffer, _x: number, _y: number): void {
+  protected renderSelf(
+    _buffer: MoonBuffer,
+    _x: number,
+    _y: number,
+    _context?: RenderContext
+  ): void {
     return;
   }
 
-  protected renderChildren(buffer: MoonBuffer, x: number, y: number): void {
+  protected renderChildren(
+    buffer: MoonBuffer,
+    x: number,
+    y: number,
+    context?: RenderContext
+  ): void {
     for (const child of this._children) {
-      child.render(buffer, x, y);
+      child.render(buffer, x, y, context);
     }
   }
 }
@@ -526,7 +545,8 @@ export class TextRenderable extends Renderable {
   protected override renderSelf(
     buffer: MoonBuffer,
     x: number,
-    y: number
+    y: number,
+    _context?: RenderContext
   ): void {
     buffer.drawText(
       this.content,
@@ -563,7 +583,8 @@ export class BoxRenderable extends Renderable {
   protected override renderSelf(
     buffer: MoonBuffer,
     x: number,
-    y: number
+    y: number,
+    _context?: RenderContext
   ): void {
     const layout = this.computedLayout;
     buffer.drawBox({
@@ -579,6 +600,206 @@ export class BoxRenderable extends Renderable {
   }
 }
 
+export interface InputRenderableOptions extends RenderableOptions {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  cursorColor?: RGBAInput;
+  cursorIndex?: number;
+  focusedBackgroundColor?: RGBAInput;
+  foregroundColor?: RGBAInput;
+  maxLength?: number;
+  onChange?: (value: string) => void;
+  onInput?: (value: string) => void;
+  onSubmit?: (value: string) => void;
+  placeholder?: string;
+  placeholderColor?: RGBAInput;
+  value?: string;
+}
+
+export class InputRenderable extends Renderable {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  cursorColor?: RGBAInput;
+  focusedBackgroundColor?: RGBAInput;
+  foregroundColor: RGBAInput;
+  maxLength?: number;
+  placeholder: string;
+  placeholderColor: RGBAInput;
+  value: string;
+  private _cursorIndex: number;
+  private _valueAtFocus: string;
+  private readonly _onChange?: (value: string) => void;
+  private readonly _onInput?: (value: string) => void;
+  private readonly _onSubmit?: (value: string) => void;
+
+  constructor(options: InputRenderableOptions = {}) {
+    const value = options.value ?? "";
+    super({
+      ...options,
+      focusable: options.focusable ?? true,
+      height: options.height ?? 1,
+      width:
+        options.width ??
+        Math.max(value.length, options.placeholder?.length ?? 0),
+    });
+    this.value = value;
+    this.placeholder = options.placeholder ?? "";
+    this.maxLength = options.maxLength;
+    this.foregroundColor = options.foregroundColor ?? terminalDefault();
+    this.placeholderColor = options.placeholderColor ?? terminalDefault();
+    this.backgroundColor = options.backgroundColor;
+    this.focusedBackgroundColor = options.focusedBackgroundColor;
+    this.cursorColor = options.cursorColor;
+    this.attributes = options.attributes;
+    this._cursorIndex = clampIndex(options.cursorIndex ?? value.length, value);
+    this._valueAtFocus = value;
+    this._onChange = options.onChange;
+    this._onInput = options.onInput;
+    this._onSubmit = options.onSubmit;
+  }
+
+  get cursorIndex(): number {
+    return this._cursorIndex;
+  }
+
+  set cursorIndex(value: number) {
+    this._cursorIndex = clampIndex(value, this.value);
+  }
+
+  /** @internal */
+  override _focus(): void {
+    if (this.focused) {
+      return;
+    }
+    this._valueAtFocus = this.value;
+    super._focus();
+  }
+
+  /** @internal */
+  override _blur(): void {
+    if (!this.focused) {
+      return;
+    }
+    this.commitChangedValue();
+    super._blur();
+  }
+
+  /** @internal */
+  override _handleKey(event: KeyEvent): void {
+    if (this.handleInputKey(event)) {
+      event.stopPropagation();
+      return;
+    }
+    super._handleKey(event);
+  }
+
+  protected override renderSelf(
+    buffer: MoonBuffer,
+    x: number,
+    y: number,
+    context?: RenderContext
+  ): void {
+    const layout = this.computedLayout;
+    const width = this.layoutComputed ? layout.width : numericSize(this.width);
+    const height = this.layoutComputed
+      ? layout.height
+      : numericSize(this.height);
+    const backgroundColor = this.focused
+      ? (this.focusedBackgroundColor ?? this.backgroundColor)
+      : this.backgroundColor;
+    if (backgroundColor && width > 0 && height > 0) {
+      buffer.fillRect(x, y, width, height, backgroundColor);
+    }
+
+    const content = this.value || this.placeholder;
+    if (content) {
+      buffer.drawText(
+        [...content].slice(0, width).join(""),
+        x,
+        y,
+        this.value ? this.foregroundColor : this.placeholderColor,
+        backgroundColor,
+        this.attributes
+      );
+    }
+
+    if (this.focused) {
+      context?.setCursorPosition(
+        x + Math.min(this._cursorIndex, width),
+        y,
+        true
+      );
+    }
+  }
+
+  private handleInputKey(event: KeyEvent): boolean {
+    const key = event.key.toLowerCase();
+    if (key === "enter") {
+      this._onSubmit?.(this.value);
+      this.commitChangedValue();
+      return true;
+    }
+    if (key === "backspace") {
+      this.deleteBeforeCursor();
+      return true;
+    }
+    if (key === "arrowleft" || key === "left") {
+      this.cursorIndex = this._cursorIndex - 1;
+      return true;
+    }
+    if (key === "arrowright" || key === "right") {
+      this.cursorIndex = this._cursorIndex + 1;
+      return true;
+    }
+    if (isPrintableKey(event)) {
+      this.insertAtCursor(event.key);
+      return true;
+    }
+    return false;
+  }
+
+  private insertAtCursor(text: string): void {
+    const chars = [...this.value];
+    if (this.maxLength !== undefined && chars.length >= this.maxLength) {
+      return;
+    }
+    chars.splice(this._cursorIndex, 0, text);
+    this.value = chars.join("");
+    this._cursorIndex += 1;
+    this._onInput?.(this.value);
+  }
+
+  private deleteBeforeCursor(): void {
+    if (this._cursorIndex === 0) {
+      return;
+    }
+    const chars = [...this.value];
+    chars.splice(this._cursorIndex - 1, 1);
+    this.value = chars.join("");
+    this._cursorIndex -= 1;
+    this._onInput?.(this.value);
+  }
+
+  private commitChangedValue(): void {
+    if (this.value === this._valueAtFocus) {
+      return;
+    }
+    this._valueAtFocus = this.value;
+    this._onChange?.(this.value);
+  }
+}
+
+function clampIndex(index: number, value: string): number {
+  return Math.max(0, Math.min(Math.floor(index), [...value].length));
+}
+
+function isPrintableKey(event: KeyEvent): boolean {
+  return (
+    !(event.modifiers.ctrl || event.modifiers.alt) &&
+    [...event.key].length === 1
+  );
+}
+
 export function Text(options: TextRenderableOptions): TextRenderable {
   return new TextRenderable(options);
 }
@@ -592,4 +813,8 @@ export function Box(
     box.add(child);
   }
   return box;
+}
+
+export function Input(options: InputRenderableOptions = {}): InputRenderable {
+  return new InputRenderable(options);
 }

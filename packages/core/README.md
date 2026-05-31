@@ -94,6 +94,37 @@ renderer.on("key", (event) => {
 })
 ```
 
+### Focused Input
+
+`Input` creates a focusable single-line text field. Handled editing keys stay with the focused input, while unhandled keys can still reach renderer listeners:
+
+```typescript
+import { Box, CliRenderer, Input, Text, rgb } from "@moontui/core"
+
+const renderer = new CliRenderer({ autoFocus: true })
+const white = rgb(255, 255, 255)
+const dim = rgb(120, 120, 120)
+const focused = rgb(24, 32, 48)
+
+const nameInput = Input({
+  placeholder: "Name",
+  width: 20,
+  placeholderColor: dim,
+  focusedBackgroundColor: focused,
+  onInput: () => renderer.render(),
+  onSubmit: (value) => {
+    renderer.root.add(Text({ content: `Hello, ${value}`, y: 2, foregroundColor: white }))
+    renderer.render()
+  },
+})
+
+renderer.root.add(
+  Box({ flexDirection: "column", gap: 1 }, Text({ content: "Your name", foregroundColor: white }), nameInput)
+)
+
+renderer.render()
+```
+
 ### `CliRenderer`
 
 The main entry point for terminal operations.

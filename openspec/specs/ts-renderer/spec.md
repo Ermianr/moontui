@@ -477,3 +477,14 @@ The TypeScript renderer SHALL use `RendererOptions.autoFocus` to decide whether 
 #### Scenario: Auto focus false leaves focus empty
 - **WHEN** `autoFocus` is false
 - **THEN** the renderer SHALL leave `focused` as `null` until focus is set explicitly
+
+### Requirement: Renderer cursor reflects focused input render state
+The TypeScript renderer SHALL allow a focused input renderable to update the renderer cursor position during a render frame.
+
+#### Scenario: Focused input updates cursor before native render
+- **WHEN** `CliRenderer.render()` renders a focused input with cursor position inside its layout rectangle
+- **THEN** the renderer SHALL call `setCursorPosition` with the input cursor coordinates before native render output is flushed
+
+#### Scenario: No focused input leaves cursor under existing renderer control
+- **WHEN** no focused input requests cursor placement during render
+- **THEN** the renderer SHALL preserve existing cursor behavior

@@ -199,6 +199,37 @@ The testing harness SHALL allow tests to verify that focused renderables receive
 - **AND** `mockKeys.pressKey("x")` is called
 - **THEN** the global key listener SHALL NOT be called
 
+### Requirement: Test harness verifies input text entry
+The testing harness SHALL allow tests to verify input renderable editing through mock key input.
+
+#### Scenario: Mock typing updates focused input
+- **WHEN** a test renderer contains a focused input
+- **AND** `mockKeys.typeText("abc")` is called
+- **THEN** the input value SHALL become `"abc"`
+
+#### Scenario: Mock backspace updates focused input
+- **WHEN** a test renderer contains a focused input with value `"abc"`
+- **AND** `mockKeys.pressBackspace()` is called
+- **THEN** the input value SHALL become `"ab"`
+
+### Requirement: Test harness verifies input callbacks
+The testing harness SHALL allow tests to assert `onInput`, `onChange`, and `onSubmit` callbacks.
+
+#### Scenario: Mock typing fires onInput
+- **WHEN** `mockKeys.typeText("x")` edits a focused input
+- **THEN** the input `onInput` callback SHALL be called with `"x"`
+
+#### Scenario: Mock enter fires submit
+- **WHEN** `mockKeys.pressEnter()` is called for a focused input
+- **THEN** the input `onSubmit` callback SHALL be called with the current value
+
+### Requirement: Test harness verifies focused input cursor output
+The testing harness SHALL allow tests to verify cursor placement for focused inputs.
+
+#### Scenario: Captured frame reports focused input cursor
+- **WHEN** a focused input renders with cursor after the second character
+- **THEN** `captureSpans()` SHALL report the cursor position at the input coordinate plus two cells
+
 ## Invariants
 
 - `createTestRenderer` never touches the real terminal. Even `restoreTerminal` is a no-op.

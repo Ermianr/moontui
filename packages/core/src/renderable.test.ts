@@ -4,6 +4,9 @@ import { api } from "./ffi";
 import {
   Box as PublicBox,
   BoxRenderable as PublicBoxRenderable,
+  Input as PublicInput,
+  InputRenderable as PublicInputRenderable,
+  type InputRenderableOptions as PublicInputRenderableOptions,
   Renderable as PublicRenderable,
   RootRenderable as PublicRootRenderable,
   Text as PublicText,
@@ -12,11 +15,14 @@ import {
 import {
   Box,
   BoxRenderable,
+  Input,
+  InputRenderable,
   Renderable,
   RootRenderable,
   Text,
   TextRenderable,
 } from "./renderable";
+import { createSpy, createTestRenderer } from "./testing/index";
 
 const white = { r: 255, g: 255, b: 255, a: 255 };
 const black = { r: 0, g: 0, b: 0, a: 255 };
@@ -228,6 +234,220 @@ test("public API exports renderable symbols", () => {
   expect(PublicRootRenderable).toBe(RootRenderable);
   expect(PublicTextRenderable).toBe(TextRenderable);
   expect(PublicBoxRenderable).toBe(BoxRenderable);
+  expect(PublicInputRenderable).toBe(InputRenderable);
   expect(PublicText).toBe(Text);
   expect(PublicBox).toBe(Box);
+  expect(PublicInput).toBe(Input);
+  const options: PublicInputRenderableOptions = { placeholder: "Name" };
+  expect(options.placeholder).toBe("Name");
+});
+
+test("input helper creates a focusable input renderable", () => {
+  const input = Input({ placeholder: "Name" });
+
+  expect(input).toBeInstanceOf(InputRenderable);
+  expect(input.focusable).toBe(true);
+});
+
+test("input participates in focus traversal by default", () => {
+  const { renderer } = createTestRenderer({ autoFocus: false });
+  const first = Text({ content: "A", focusable: true });
+  const input = Input({ placeholder: "Name" });
+  renderer.root.add(first).add(input);
+
+  expect(renderer.focusNext()).toBe(first);
+  expect(renderer.focusNext()).toBe(input);
+  renderer.destroy();
+});
+
+test("input stores initial value and cursor position", () => {
+  const input = Input({ value: "abc" });
+
+  expect(input.value).toBe("abc");
+  expect(input.cursorIndex).toBe(3);
+});
+
+test("input renders placeholder and value", async () => {
+  const empty = createTestRenderer({ width: 12, height: 2 });
+  empty.renderer.root.add(Input({ placeholder: "Name", width: 8 }));
+  await empty.renderOnce();
+  expect(empty.captureCharFrame()).toContain("Name");
+  empty.renderer.destroy();
+
+  const filled = createTestRenderer({ width: 12, height: 2 });
+  filled.renderer.root.add(Input({ value: "Kevin", width: 8 }));
+  await filled.renderOnce();
+  expect(filled.captureCharFrame()).toContain("Kevin");
+  filled.renderer.destroy();
+});
+
+test("input clips rendered content to its width", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    width: 8,
+    height: 2,
+  });
+  renderer.root.add(Input({ value: "abcdef", width: 3 }));
+
+  await renderOnce();
+
+  const line = captureSpans()
+    .lines[0]?.spans.map((span) => span.text)
+    .join("");
+  expect(line?.slice(0, 3)).toBe("abc");
+  expect(line?.slice(0, 4)).not.toBe("abcd");
+  renderer.destroy();
+});
+
+test("input inserts printable keys at the cursor", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const input = Input({ value: "ac" });
+  input.cursorIndex = 1;
+  renderer.root.add(input);
+  renderer.focus(input);
+
+  mockInput.pressKey("b");
+
+  expect(input.value).toBe("abc");
+  expect(input.cursorIndex).toBe(2);
+  renderer.destroy();
+});
+
+test("input enforces maxLength during insertion", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const input = Input({ value: "abc", maxLength: 3 });
+  renderer.root.add(input);
+  renderer.focus(input);
+
+  mockInput.pressKey("d");
+
+  expect(input.value).toBe("abc");
+  renderer.destroy();
+});
+
+test("input handles backspace and horizontal cursor movement", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const input = Input({ value: "abc" });
+  renderer.root.add(input);
+  renderer.focus(input);
+  input.cursorIndex = 2;
+
+  mockInput.pressArrow("left");
+  expect(input.cursorIndex).toBe(1);
+  mockInput.pressArrow("right");
+  expect(input.cursorIndex).toBe(2);
+  mockInput.pressBackspace();
+
+  expect(input.value).toBe("ac");
+  expect(input.cursorIndex).toBe(1);
+  renderer.destroy();
+});
+
+test("input emits input submit and change callbacks", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const onInput = createSpy();
+  const onSubmit = createSpy();
+  const onChange = createSpy();
+  const input = Input({ onInput, onSubmit, onChange });
+  renderer.root.add(input);
+  renderer.focus(input);
+
+  mockInput.pressKey("x");
+  mockInput.pressEnter();
+
+  expect(onInput.calledWith("x")).toBe(true);
+  expect(onSubmit.calledWith("x")).toBe(true);
+  expect(onChange.calledWith("x")).toBe(true);
+  renderer.destroy();
+});
+
+test("input commits changed value on blur", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const onChange = createSpy();
+  const input = Input({ onChange });
+  const next = Text({ content: "Next", focusable: true });
+  renderer.root.add(input).add(next);
+  renderer.focus(input);
+
+  mockInput.pressKey("x");
+  renderer.focus(next);
+
+  expect(onChange.calledWith("x")).toBe(true);
+  renderer.destroy();
+});
+
+test("input consumes handled editing keys and lets unhandled keys propagate", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const globalKey = createSpy();
+  const input = Input();
+  renderer.root.add(input);
+  renderer.focus(input);
+  renderer.on("key", globalKey);
+
+  mockInput.pressKey("x");
+  mockInput.pressEscape();
+
+  expect(globalKey.callCount()).toBe(1);
+  expect(globalKey.calls[0]?.[0]?.key).toBe("esc");
+  renderer.destroy();
+});
+
+test("input renders focused and unfocused background styles", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    autoFocus: false,
+    width: 16,
+    height: 2,
+  });
+  const focusedBackgroundColor = { r: 1, g: 2, b: 3, a: 255 };
+  const backgroundColor = { r: 4, g: 5, b: 6, a: 255 };
+  const input = Input({
+    value: "x",
+    width: 3,
+    backgroundColor,
+    focusedBackgroundColor,
+  });
+  renderer.root.add(input);
+
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text.includes("x"))?.bg.r
+  ).toBe(backgroundColor.r);
+  renderer.focus(input);
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text.includes("x"))?.bg.r
+  ).toBe(focusedBackgroundColor.r);
+  renderer.destroy();
+});
+
+test("input renders placeholder style", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    width: 16,
+    height: 2,
+  });
+  const placeholderColor = { r: 9, g: 8, b: 7, a: 255 };
+  renderer.root.add(Input({ placeholder: "Name", width: 6, placeholderColor }));
+
+  await renderOnce();
+
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "Name")?.fg.r
+  ).toBe(placeholderColor.r);
+  renderer.destroy();
+});
+
+test("focused input sets captured cursor position", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    autoFocus: false,
+    width: 16,
+    height: 4,
+  });
+  const input = Input({ value: "abc", x: 4, y: 2, width: 8 });
+  input.cursorIndex = 3;
+  renderer.root.add(input);
+  renderer.focus(input);
+
+  await renderOnce();
+
+  expect(captureSpans().cursor).toEqual([7, 2]);
+  renderer.destroy();
 });
