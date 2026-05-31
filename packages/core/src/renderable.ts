@@ -1,4 +1,5 @@
 import type { DrawBoxOptions, MoonBuffer } from "./buffer";
+import type { KeyEvent } from "./renderer";
 import type { RGBAInput } from "./rgba";
 import { terminalDefault } from "./rgba";
 
@@ -36,6 +37,11 @@ export interface LayoutProps {
 }
 
 export interface RenderableOptions extends LayoutProps {
+  disabled?: boolean;
+  focusable?: boolean;
+  onBlur?: (renderable: Renderable) => void;
+  onFocus?: (renderable: Renderable) => void;
+  onKey?: (event: KeyEvent, renderable: Renderable) => void;
   x?: number;
   y?: number;
 }
@@ -50,11 +56,22 @@ export class Renderable {
   private _computedLayout: LayoutRect = { x: 0, y: 0, width: 0, height: 0 };
   private _hasComputedLayout = false;
   private _layoutDirty = true;
+  private _disabled = false;
+  private _focusable = false;
+  private _focused = false;
+  private readonly _onBlur?: (renderable: Renderable) => void;
+  private readonly _onFocus?: (renderable: Renderable) => void;
+  private readonly _onKey?: (event: KeyEvent, renderable: Renderable) => void;
   private readonly _children: Renderable[] = [];
 
   constructor(options: RenderableOptions = {}) {
     this._x = options.x ?? 0;
     this._y = options.y ?? 0;
+    this._disabled = options.disabled ?? false;
+    this._focusable = options.focusable ?? false;
+    this._onBlur = options.onBlur;
+    this._onFocus = options.onFocus;
+    this._onKey = options.onKey;
     this._layoutProps = {
       bottom: options.bottom,
       flexDirection: options.flexDirection,
@@ -92,6 +109,32 @@ export class Renderable {
 
   get layoutDirty(): boolean {
     return this._layoutDirty;
+  }
+
+  get disabled(): boolean {
+    return this._disabled;
+  }
+
+  set disabled(value: boolean) {
+    this._disabled = value;
+    if (value) {
+      this._clearFocusedDeep();
+    }
+  }
+
+  get focusable(): boolean {
+    return this._focusable;
+  }
+
+  set focusable(value: boolean) {
+    this._focusable = value;
+    if (!value) {
+      this._clearFocusedDeep();
+    }
+  }
+
+  get focused(): boolean {
+    return this._focused;
   }
 
   get layoutProps(): Readonly<LayoutProps> {
@@ -142,6 +185,10 @@ export class Renderable {
     return this._children;
   }
 
+  get parent(): Renderable | null {
+    return this._parent;
+  }
+
   add(child: Renderable): this {
     child._parent = this;
     this._children.push(child);
@@ -152,6 +199,7 @@ export class Renderable {
   remove(child: Renderable): this {
     const index = this._children.indexOf(child);
     if (index !== -1) {
+      child._clearFocusedDeep();
       child._parent = null;
       this._children.splice(index, 1);
       this.markLayoutDirty();
@@ -196,6 +244,37 @@ export class Renderable {
     this._hasComputedLayout = false;
     for (const child of this._children) {
       child._clearComputedLayout();
+    }
+  }
+
+  /** @internal */
+  _focus(): void {
+    if (this._focused) {
+      return;
+    }
+    this._focused = true;
+    this._onFocus?.(this);
+  }
+
+  /** @internal */
+  _blur(): void {
+    if (!this._focused) {
+      return;
+    }
+    this._focused = false;
+    this._onBlur?.(this);
+  }
+
+  /** @internal */
+  _handleKey(event: KeyEvent): void {
+    this._onKey?.(event, this);
+  }
+
+  /** @internal */
+  _clearFocusedDeep(): void {
+    this._blur();
+    for (const child of this._children) {
+      child._clearFocusedDeep();
     }
   }
 

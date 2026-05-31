@@ -4,6 +4,7 @@ import { buttonToNative, scrollDirectionToNative } from "../mouse";
 import { CliRenderer, type RenderStats } from "../renderer";
 
 export interface TestRendererOptions {
+  autoFocus?: boolean;
   height?: number;
   kittyKeyboard?: boolean;
   useMouse?: boolean;
@@ -138,6 +139,7 @@ export function createTestRenderer(
   const renderer = new CliRenderer({
     test: true,
     width,
+    autoFocus: options.autoFocus,
     height,
     useMouse: options.useMouse ?? true,
   });

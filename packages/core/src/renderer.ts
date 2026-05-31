@@ -8,6 +8,7 @@ import {
   type ReadonlyPointer,
   type Renderer,
 } from "./ffi";
+import { FocusManager } from "./focus-manager";
 import {
   buttonFromNative,
   MouseEvent as MoonMouseEvent,
@@ -18,7 +19,7 @@ import {
   scrollDirectionFromNative,
 } from "./mouse";
 import type { FFICallbackInstance } from "./platform/types";
-import { RootRenderable } from "./renderable";
+import { type Renderable, RootRenderable } from "./renderable";
 
 export interface RendererOptions {
   autoFocus?: boolean;
@@ -107,6 +108,7 @@ export class CliRenderer {
   private _useMouse: boolean;
   private _enableMouseMovement: boolean;
   private _autoFocus: boolean;
+  private readonly _focusManager: FocusManager;
   private readonly _useAlternateScreen: boolean;
 
   constructor(options: RendererOptions = {}) {
@@ -123,12 +125,12 @@ export class CliRenderer {
       options.test ?? false
     );
     this.root = new RootRenderable(this._width, this._height);
+    this._focusManager = new FocusManager(this.root);
 
     this._eventCallback = api.events.createEventCallback(
       (event: { key: string; ctrl: boolean; shift: boolean; alt: boolean }) => {
         queueMicrotask(() => {
-          this._emitter.emit(
-            "key",
+          this.dispatchKeyEvent(
             new KeyEvent(event.key, {
               ctrl: event.ctrl,
               shift: event.shift,
@@ -289,6 +291,24 @@ export class CliRenderer {
     return new MoonBuffer(bufPtr, this._width, this._height);
   }
 
+  private dispatchKeyEvent(event: KeyEvent): void {
+    this.ensureAutoFocus();
+    this._focusManager.dispatchKey(event);
+    if (!event.propagationStopped) {
+      this._emitter.emit("key", event);
+    }
+  }
+
+  private ensureAutoFocus(): void {
+    if (!this._autoFocus || this._focusManager.focused) {
+      return;
+    }
+    const first = this._focusManager.firstFocusable();
+    if (first) {
+      this._focusManager.focus(first);
+    }
+  }
+
   getCurrentBuffer(): ReadonlyMoonBuffer {
     return this.getReadonlyBuffer(() =>
       api.renderer.getCurrentBuffer(this._ptr)
@@ -312,6 +332,32 @@ export class CliRenderer {
     handler: (...args: RendererEvents[K]) => void
   ): void {
     this._emitter.on(event, handler);
+  }
+
+  focus(renderable: Renderable): boolean {
+    this.guard();
+    return this._focusManager.focus(renderable);
+  }
+
+  blur(): void {
+    this.guard();
+    this._focusManager.blur();
+  }
+
+  focusNext(): Renderable | null {
+    this.guard();
+    return this._focusManager.focusNext();
+  }
+
+  focusPrevious(): Renderable | null {
+    this.guard();
+    return this._focusManager.focusPrevious();
+  }
+
+  get focused(): Renderable | null {
+    this.guard();
+    this.ensureAutoFocus();
+    return this._focusManager.focused;
   }
 
   getStats(): RenderStats {
@@ -338,7 +384,7 @@ export class CliRenderer {
 
   emitKeyEvent(key: string, ctrl: boolean, shift: boolean, alt: boolean): void {
     this.guard();
-    this._emitter.emit("key", new KeyEvent(key, { ctrl, shift, alt }));
+    this.dispatchKeyEvent(new KeyEvent(key, { ctrl, shift, alt }));
   }
 
   get useMouse(): boolean {
