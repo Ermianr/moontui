@@ -1,4 +1,5 @@
 import type { DrawBoxOptions, MoonBuffer } from "./buffer";
+import { api } from "./ffi";
 import type { KeyEvent } from "./renderer";
 import type { RGBAInput } from "./rgba";
 import { terminalDefault } from "./rgba";
@@ -420,6 +421,112 @@ function normalizeEdges(
   };
 }
 
+function flattenLayoutTree(
+  root: RootRenderable
+): { node: Renderable; parentIndex: number }[] {
+  const items: { node: Renderable; parentIndex: number }[] = [];
+  const visit = (node: Renderable, parentIndex: number) => {
+    const index = items.length;
+    items.push({ node, parentIndex });
+    for (const child of node.children) {
+      visit(child, index);
+    }
+  };
+  visit(root, -1);
+  return items;
+}
+
+function writeLayoutStyle(
+  styles: Float32Array,
+  nodeIndex: number,
+  node: Renderable,
+  isRoot: boolean,
+  rootWidth: number,
+  rootHeight: number
+): void {
+  const offset = nodeIndex * STYLE_STRIDE;
+  styles.fill(NAN, offset, offset + STYLE_STRIDE);
+  const props = node.layoutProps;
+  styles[offset] = isRoot ? rootWidth : scalarSize(props.width);
+  styles[offset + 1] = isRoot ? rootHeight : scalarSize(props.height);
+  styles[offset + 2] = scalarSize(props.flexBasis);
+  styles[offset + 3] = props.minWidth ?? NAN;
+  styles[offset + 4] = props.minHeight ?? NAN;
+  styles[offset + 5] = props.maxWidth ?? NAN;
+  styles[offset + 6] = props.maxHeight ?? NAN;
+  styles[offset + 7] = props.flexGrow ?? 0;
+  styles[offset + 8] = props.flexShrink ?? 1;
+  styles[offset + 9] = props.flexDirection === "row" ? 1 : 0;
+  styles[offset + 10] = alignToNative(props.alignItems);
+  styles[offset + 11] = alignToNative(props.alignSelf);
+  styles[offset + 12] = justifyToNative(props.justifyContent);
+  styles[offset + 13] = props.display === "none" ? 1 : 0;
+  styles[offset + 14] = props.position === "absolute" ? 1 : 0;
+  styles[offset + 15] = props.gap ?? 0;
+  writeEdges(styles, offset + 16, props.padding);
+  writeEdges(styles, offset + 20, props.margin);
+  styles[offset + 24] = props.left ?? NAN;
+  styles[offset + 25] = props.right ?? NAN;
+  styles[offset + 26] = props.top ?? NAN;
+  styles[offset + 27] = props.bottom ?? NAN;
+  styles[offset + 28] = node.usesLayoutProps ? 1 : 0;
+  styles[offset + 29] = 0;
+}
+
+function scalarSize(size: LayoutSize | undefined): number {
+  if (typeof size === "number") {
+    return size;
+  }
+  if (typeof size === "string" && size.endsWith("%")) {
+    const percentage = Number(size.slice(0, -1));
+    if (Number.isFinite(percentage)) {
+      return -percentage;
+    }
+  }
+  return NAN;
+}
+
+function writeEdges(
+  styles: Float32Array,
+  offset: number,
+  edges: LayoutEdges | number | undefined
+): void {
+  const normalized = normalizeEdges(edges);
+  styles[offset] = normalized.top;
+  styles[offset + 1] = normalized.right;
+  styles[offset + 2] = normalized.bottom;
+  styles[offset + 3] = normalized.left;
+}
+
+function alignToNative(align: LayoutAlign | undefined): number {
+  if (align === "center") {
+    return 1;
+  }
+  if (align === "end") {
+    return 2;
+  }
+  if (align === "start") {
+    return 3;
+  }
+  if (align === "stretch") {
+    return 0;
+  }
+  return -1;
+}
+
+function justifyToNative(justify: LayoutJustify | undefined): number {
+  if (justify === "center") {
+    return 1;
+  }
+  if (justify === "end") {
+    return 2;
+  }
+  if (justify === "space-between") {
+    return 3;
+  }
+  return 0;
+}
+
 export interface LayoutEngine {
   compute(root: RootRenderable, width: number, height: number): void;
 }
@@ -432,6 +539,56 @@ export class TypeScriptLayoutEngine implements LayoutEngine {
 }
 
 export const defaultLayoutEngine = new TypeScriptLayoutEngine();
+
+const STYLE_STRIDE = 30;
+const MEASURE_STRIDE = 2;
+const RECT_STRIDE = 4;
+const NAN = Number.NaN;
+
+export class TaffyLayoutEngine implements LayoutEngine {
+  compute(root: RootRenderable, width: number, height: number): void {
+    const nodes = flattenLayoutTree(root);
+    const parentIndices = new Int32Array(nodes.length);
+    const styles = new Float32Array(nodes.length * STYLE_STRIDE);
+    const measurements = new Float32Array(nodes.length * MEASURE_STRIDE);
+    const outRects = new Float32Array(nodes.length * RECT_STRIDE);
+
+    for (const [index, item] of nodes.entries()) {
+      parentIndices[index] = item.parentIndex;
+      writeLayoutStyle(styles, index, item.node, index === 0, width, height);
+      const intrinsic = item.node._measureIntrinsicSize();
+      measurements[index * MEASURE_STRIDE] = intrinsic.width;
+      measurements[index * MEASURE_STRIDE + 1] = intrinsic.height;
+    }
+
+    const result = api.renderer.computeTaffyLayout(
+      parentIndices,
+      styles,
+      measurements,
+      outRects
+    );
+    if (result !== 0) {
+      throw new Error(`Taffy layout failed with error code ${result}`);
+    }
+
+    for (const [index, item] of nodes.entries()) {
+      if (item.node.layoutProps.display === "none") {
+        item.node._clearComputedLayout();
+        continue;
+      }
+      const rectOffset = index * RECT_STRIDE;
+      item.node._setComputedLayout({
+        x: outRects[rectOffset] ?? 0,
+        y: outRects[rectOffset + 1] ?? 0,
+        width: outRects[rectOffset + 2] ?? 0,
+        height: outRects[rectOffset + 3] ?? 0,
+      });
+    }
+    root._markLayoutClean();
+  }
+}
+
+export const taffyLayoutEngine = new TaffyLayoutEngine();
 
 // Unsupported layout domains are intentionally absent from LayoutProps:
 // grid, transforms, wrapping, z-index layout semantics, and percentage margins.
