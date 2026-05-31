@@ -60,6 +60,40 @@ renderer.root
 renderer.render()
 ```
 
+### Focus Traversal
+
+Mark renderables as focusable to let the renderer move keyboard focus through the renderable tree with `Tab` and `Shift+Tab`:
+
+```typescript
+import { Box, CliRenderer, Text } from "@moontui/core"
+
+const renderer = new CliRenderer({ autoFocus: true })
+
+const first = Text({
+  content: "First",
+  focusable: true,
+  onFocus: () => renderer.render(),
+  onBlur: () => renderer.render(),
+})
+
+const second = Text({
+  content: "Second",
+  focusable: true,
+  onKey: (event) => {
+    if (event.key === "enter") {
+      event.stopPropagation()
+    }
+  },
+})
+
+renderer.root.add(Box({ flexDirection: "column" }, first, second))
+renderer.on("key", (event) => {
+  if (event.key === "q") {
+    renderer.destroy()
+  }
+})
+```
+
 ### `CliRenderer`
 
 The main entry point for terminal operations.
@@ -70,6 +104,10 @@ The main entry point for terminal operations.
 - `renderer.render()` -- render the current buffer to the terminal
 - `renderer.processEvents()` -- poll for input events (keyboard, mouse, resize)
 - `renderer.on(event, handler)` -- listen for events (`key`, `mouse`, `resize`, `frame`)
+- `renderer.focus(renderable)` -- focus a focusable renderable in the renderer tree
+- `renderer.blur()` -- clear current focus
+- `renderer.focusNext()` / `renderer.focusPrevious()` -- move focus in renderable tree order
+- `renderer.focused` -- read the currently focused renderable, or `null`
 - `renderer.destroy()` -- clean up native resources
 - `renderer.getNextBuffer()` -- get the back buffer for drawing
 - `renderer.getCurrentBuffer()` -- get the front buffer (last rendered)
