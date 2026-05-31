@@ -42,6 +42,24 @@ loop()
 
 ## API
 
+### Layout Renderables
+
+Use `Box` and `Text` on the renderer root for declarative row or column layouts:
+
+```typescript
+import { Box, CliRenderer, Text, rgb } from "@moontui/core"
+
+const renderer = new CliRenderer({ width: 40, height: 10 })
+const white = rgb(255, 255, 255)
+
+renderer.root.setLayoutProps({ flexDirection: "column", gap: 1 })
+renderer.root
+  .add(Box({ height: 3, padding: 1 }, Text({ content: "Header", foregroundColor: white })))
+  .add(Box({ flexGrow: 1, padding: 1 }, Text({ content: "Flexible body", foregroundColor: white })))
+
+renderer.render()
+```
+
 ### `CliRenderer`
 
 The main entry point for terminal operations.
