@@ -1,3 +1,20 @@
+# Normalize text files to LF in the repository and working tree.
+* text=auto eol=lf
+
+# Keep native/package artifacts binary so Git never rewrites bytes.
+*.dll -text -eol
+*.exe -text -eol
+*.png -text -eol
+*.jpg -text -eol
+*.jpeg -text -eol
+*.gif -text -eol
+*.ico -text -eol
+*.pdf -text -eol
+*.zip -text -eol
+*.gz -text -eol
+*.tgz -text -eol
+*.wasm -text -eol
+
 # Auto-generated files
 packages/core/src/ffi.ts linguist-generated=true
 packages/core/src/structs.ts linguist-generated=true
