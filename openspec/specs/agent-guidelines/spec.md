@@ -45,3 +45,19 @@ Every strong claim in `AGENTS.md` about repository behavior SHALL match the curr
 #### Scenario: FFI change verification
 - **WHEN** an agent changes the Rust/TypeScript FFI boundary
 - **THEN** `AGENTS.md` SHALL direct the agent to regenerate bindings through the schema/codegen workflow instead of editing generated files manually
+
+<!-- Synced from openspec/changes/cleanup-openspec-specs/specs/agent-guidelines/spec.md. -->
+
+### Requirement: Agent guidelines remain the source for agent workflow rules
+Agent-facing workflow, generated-file, verification, and evidence rules SHALL remain in AGENTS.md rather than duplicated across housekeeping specs.
+
+#### Scenario: Housekeeping spec is removed
+- **WHEN** a housekeeping-only OpenSpec file is deleted
+- **THEN** agent workflow rules needed for future work remain available in AGENTS.md
+
+### Requirement: Agent claims remain evidence-backed during spec cleanup
+Spec cleanup work SHALL preserve the project evidence rule for claims about files, commands, modules, and behavior.
+
+#### Scenario: Cleanup justification cites repository state
+- **WHEN** a spec is removed, repaired, or consolidated based on repository state
+- **THEN** the implementation notes or review evidence cite exact file paths and line numbers

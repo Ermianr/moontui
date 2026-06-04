@@ -41,19 +41,24 @@ struct Rect {
 }
 
 struct LayoutInput<'a> {
-  parents: &'a [i32],
+  children: ChildRelationships,
   styles: &'a [f32],
   measurements: &'a [f32],
+}
+
+struct ChildRelationships {
+  indices: Vec<usize>,
+  ranges: Vec<std::ops::Range<usize>>,
 }
 
 /// @ffi_manual
 /// @ts_args parentIndices: Int32Array, styles: Float32Array, measurements: Float32Array, outRects: Float32Array
 /// @ts_returns number
-/// @ts_body return lib.symbols.computeTaffyLayout(backend.ptr(parentIndices), BigInt(parentIndices.length), backend.ptr(styles), BigInt(styles.length), backend.ptr(measurements), BigInt(measurements.length), backend.ptr(outRects), BigInt(outRects.length))
+/// @ts_body return lib.symbols.computeNativeCustomLayout(backend.ptr(parentIndices), BigInt(parentIndices.length), backend.ptr(styles), BigInt(styles.length), backend.ptr(measurements), BigInt(measurements.length), backend.ptr(outRects), BigInt(outRects.length))
 #[moontui_export_manual]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
-pub extern "C" fn computeTaffyLayout(
+pub extern "C" fn computeNativeCustomLayout(
   parent_indices_ptr: *const i32,
   parent_indices_len: usize,
   styles_ptr: *const f32,
@@ -63,33 +68,57 @@ pub extern "C" fn computeTaffyLayout(
   out_rects_ptr: *mut f32,
   out_rects_len: usize,
 ) -> i32 {
+  let Some(status) = validate_layout_buffers(
+    parent_indices_ptr,
+    parent_indices_len,
+    styles_ptr,
+    styles_len,
+    measurements_ptr,
+    measurements_len,
+    out_rects_ptr,
+    out_rects_len,
+  ) else {
+    unsafe {
+      let parents = std::slice::from_raw_parts(parent_indices_ptr, parent_indices_len);
+      let styles = std::slice::from_raw_parts(styles_ptr, styles_len);
+      let measurements = std::slice::from_raw_parts(measurements_ptr, measurements_len);
+      let out_rects = std::slice::from_raw_parts_mut(out_rects_ptr, out_rects_len);
+      if compute_layout(parents, styles, measurements, out_rects).is_err() {
+        return LAYOUT_ERR_INVALID_INPUT;
+      }
+    }
+    return LAYOUT_OK;
+  };
+  status
+}
+
+fn validate_layout_buffers(
+  parent_indices_ptr: *const i32,
+  parent_indices_len: usize,
+  styles_ptr: *const f32,
+  styles_len: usize,
+  measurements_ptr: *const f32,
+  measurements_len: usize,
+  out_rects_ptr: *mut f32,
+  out_rects_len: usize,
+) -> Option<i32> {
   if parent_indices_len == 0
     || parent_indices_ptr.is_null()
     || styles_ptr.is_null()
     || measurements_ptr.is_null()
     || out_rects_ptr.is_null()
   {
-    return LAYOUT_ERR_INVALID_INPUT;
+    return Some(LAYOUT_ERR_INVALID_INPUT);
   }
   if styles_len != parent_indices_len * STYLE_STRIDE
     || measurements_len != parent_indices_len * MEASURE_STRIDE
   {
-    return LAYOUT_ERR_INVALID_INPUT;
+    return Some(LAYOUT_ERR_INVALID_INPUT);
   }
   if out_rects_len < parent_indices_len * RECT_STRIDE {
-    return LAYOUT_ERR_OUTPUT_TOO_SMALL;
+    return Some(LAYOUT_ERR_OUTPUT_TOO_SMALL);
   }
-
-  unsafe {
-    let parents = std::slice::from_raw_parts(parent_indices_ptr, parent_indices_len);
-    let styles = std::slice::from_raw_parts(styles_ptr, styles_len);
-    let measurements = std::slice::from_raw_parts(measurements_ptr, measurements_len);
-    let out_rects = std::slice::from_raw_parts_mut(out_rects_ptr, out_rects_len);
-    if compute_layout(parents, styles, measurements, out_rects).is_err() {
-      return LAYOUT_ERR_INVALID_INPUT;
-    }
-  }
-  LAYOUT_OK
+  None
 }
 
 fn compute_layout(
@@ -98,11 +127,11 @@ fn compute_layout(
   measurements: &[f32],
   out_rects: &mut [f32],
 ) -> Result<(), ()> {
-  let _taffy_dependency_anchor: taffy::Style = taffy::Style::default();
   if parents.first() != Some(&-1) || parents.iter().skip(1).any(|p| *p < 0) {
     return Err(());
   }
-  let input = LayoutInput { parents, styles, measurements };
+  let input =
+    LayoutInput { children: ChildRelationships::from_parents(parents)?, styles, measurements };
   let root_style = style(&input, 0);
   let width = value(root_style, STYLE_WIDTH).unwrap_or(0.0);
   let height = value(root_style, STYLE_HEIGHT).unwrap_or(0.0);
@@ -112,7 +141,7 @@ fn compute_layout(
 
 fn layout_node(input: &LayoutInput<'_>, out: &mut [f32], node: usize, rect: Rect, force: bool) {
   write_rect(out, node, rect);
-  let all_children = children(input, node);
+  let all_children = input.children.children(node);
   let explicit_children: Vec<usize> = all_children
     .iter()
     .copied()
@@ -121,14 +150,14 @@ fn layout_node(input: &LayoutInput<'_>, out: &mut [f32], node: usize, rect: Rect
   let should_layout =
     force || bool_style(input, node, STYLE_USES_LAYOUT) || !explicit_children.is_empty();
   if !should_layout {
-    for child in all_children {
+    for child in all_children.iter().copied() {
       clear_rect(out, child);
     }
     return;
   }
 
-  let candidate_children = if force || bool_style(input, node, STYLE_USES_LAYOUT) {
-    all_children
+  let candidate_children: Vec<usize> = if force || bool_style(input, node, STYLE_USES_LAYOUT) {
+    all_children.to_vec()
   } else {
     explicit_children
   };
@@ -158,7 +187,7 @@ fn layout_node(input: &LayoutInput<'_>, out: &mut [f32], node: usize, rect: Rect
     .collect();
   layout_flow(input, out, &flow_children, node, content, is_row, gap, justify);
   layout_absolute(input, out, &absolute_children, content);
-  for child in children(input, node) {
+  for child in input.children.children(node).iter().copied() {
     if !layout_children.contains(&child) {
       clear_rect(out, child);
     }
@@ -268,7 +297,7 @@ fn layout_flow(
     } else {
       cross_size - cross_margin
     };
-    let cross = explicit_cross.max(fallback_cross).max(0.0);
+    let cross = if explicit_cross == 0.0 { fallback_cross } else { explicit_cross }.max(0.0);
     let cross_offset = match align {
       1 => ((cross_size - cross - cross_margin).max(0.0) / 2.0).floor(),
       2 => (cross_size - cross - cross_margin).max(0.0),
@@ -359,13 +388,40 @@ fn first_non_zero(values: [f32; 3]) -> f32 {
   values.into_iter().find(|value| *value != 0.0).unwrap_or(0.0)
 }
 
-fn children(input: &LayoutInput<'_>, node: usize) -> Vec<usize> {
-  input
-    .parents
-    .iter()
-    .enumerate()
-    .filter_map(|(index, parent)| (*parent == node as i32).then_some(index))
-    .collect()
+impl ChildRelationships {
+  fn from_parents(parents: &[i32]) -> Result<Self, ()> {
+    let mut counts = vec![0usize; parents.len()];
+    for parent in parents.iter().skip(1).copied() {
+      let parent = usize::try_from(parent).map_err(|_| ())?;
+      if parent >= parents.len() {
+        return Err(());
+      }
+      counts[parent] += 1;
+    }
+
+    let mut ranges = Vec::with_capacity(parents.len());
+    let mut start = 0;
+    for count in counts {
+      let end = start + count;
+      ranges.push(start..end);
+      start = end;
+    }
+
+    let mut next = ranges.iter().map(|range| range.start).collect::<Vec<_>>();
+    let mut indices = vec![0usize; parents.len().saturating_sub(1)];
+    for (child, parent) in parents.iter().enumerate().skip(1) {
+      let parent = usize::try_from(*parent).map_err(|_| ())?;
+      let slot = next[parent];
+      indices[slot] = child;
+      next[parent] += 1;
+    }
+
+    Ok(Self { indices, ranges })
+  }
+
+  fn children(&self, node: usize) -> &[usize] {
+    self.ranges.get(node).map_or(&[], |range| &self.indices[range.clone()])
+  }
 }
 
 fn style<'a>(input: &'a LayoutInput<'_>, node: usize) -> &'a [f32] {
@@ -420,5 +476,9 @@ fn write_rect(out: &mut [f32], node: usize, rect: Rect) {
 }
 
 fn clear_rect(out: &mut [f32], node: usize) {
-  write_rect(out, node, Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
+  let start = node * RECT_STRIDE;
+  out[start] = f32::NAN;
+  out[start + 1] = f32::NAN;
+  out[start + 2] = f32::NAN;
+  out[start + 3] = f32::NAN;
 }

@@ -81,3 +81,19 @@ The `build:codegen` script SHALL use the same `--cwd` delegation pattern as othe
 - **WHEN** `bun run build:codegen` is executed
 - **THEN** it SHALL either use `--cwd packages/core` delegation
 - **OR** it SHALL be a root-level script that is documented in AGENTS.md as a root-level exception
+
+<!-- Synced from openspec/changes/cleanup-openspec-specs/specs/dev-script-organization/spec.md. -->
+
+### Requirement: Script specs avoid duplicating package scripts
+Dev script organization specs SHALL describe script organization rules only when they add guidance beyond the literal scripts in `package.json`.
+
+#### Scenario: Script command already exists in package metadata
+- **WHEN** a command is fully represented by `package.json`
+- **THEN** OpenSpec does not duplicate it as a separate housekeeping-only base spec
+
+### Requirement: Canonical workflows remain discoverable
+Repository workflow guidance SHALL remain discoverable from AGENTS.md and package scripts after housekeeping specs are removed.
+
+#### Scenario: Agent needs a verification command
+- **WHEN** an agent needs the canonical verification command for a change type
+- **THEN** the command can be found in AGENTS.md or package scripts without relying on removed housekeeping specs

@@ -1,5 +1,7 @@
 # renderable-layout
 
+## Purpose
+
 Declarative layout behavior for TypeScript renderables before drawing into a `MoonBuffer`.
 
 ## Requirements
@@ -140,30 +142,52 @@ The system SHALL maintain deterministic layout fixtures that define expected com
 - **WHEN** no geometry-affecting input has changed since the previous render
 - **THEN** layout fixture execution SHALL verify that recomputation is skipped where observable by the test harness
 
-### Requirement: Taffy layout preserves finalized layout contract
-The Taffy backend SHALL preserve the finalized renderable layout contract for supported props.
+### Requirement: Native custom layout preserves finalized layout contract
+The native custom backend SHALL preserve the finalized renderable layout contract for supported props.
 
 #### Scenario: Flow layout parity
-- **WHEN** row, column, flex grow, flex shrink, flex basis, min/max size, padding, margin, gap, and alignment fixtures run with Taffy
+- **WHEN** row, column, flex grow, flex shrink, flex basis, min/max size, padding, margin, gap, and alignment fixtures run with native custom layout
 - **THEN** public computed rectangles SHALL match the layout contract expectations
 
 #### Scenario: Absolute layout parity
-- **WHEN** absolute positioning fixtures run with Taffy
+- **WHEN** absolute positioning fixtures run with native custom layout
 - **THEN** absolute children SHALL not consume flow space
 - **AND** their public computed rectangles SHALL match the layout contract expectations
 
 #### Scenario: Display none parity
-- **WHEN** a renderable has `display: "none"` and layout runs with Taffy
+- **WHEN** a renderable has `display: "none"` and layout runs with native custom layout
 - **THEN** it SHALL not consume layout space
 - **AND** it SHALL not render output
 
-### Requirement: Taffy layout uses precomputed intrinsic measurements
-The Taffy backend SHALL receive intrinsic measurements from TypeScript for text-like renderables during the experimental implementation.
+### Requirement: Native custom layout uses precomputed intrinsic measurements
+The native custom backend SHALL receive intrinsic measurements from TypeScript for text-like renderables during the experimental implementation.
 
-#### Scenario: Text intrinsic measurement is sent to Taffy
+#### Scenario: Text intrinsic measurement is sent to native custom layout
 - **WHEN** a text renderable has no explicit width
-- **THEN** the Taffy backend SHALL receive the renderable's terminal-cell intrinsic width as layout input
+- **THEN** the native custom backend SHALL receive the renderable's terminal-cell intrinsic width as layout input
 
-#### Scenario: Input intrinsic measurement is sent to Taffy
+#### Scenario: Input intrinsic measurement is sent to native custom layout
 - **WHEN** an input renderable has no explicit width
-- **THEN** the Taffy backend SHALL receive the greater terminal-cell width of its value and placeholder as layout input
+- **THEN** the native custom backend SHALL receive the greater terminal-cell width of its value and placeholder as layout input
+
+### Requirement: Interactive widgets provide intrinsic layout measurements
+Button and checkbox renderables SHALL provide intrinsic terminal-cell measurements to native custom layout when explicit dimensions are not provided.
+
+#### Scenario: Button intrinsic measurement is sent to native custom layout
+- **WHEN** a button renderable has no explicit width
+- **THEN** the native custom backend SHALL receive intrinsic width based on the visible button label representation
+
+#### Scenario: Checkbox intrinsic measurement is sent to native custom layout
+- **WHEN** a checkbox renderable has no explicit width
+- **THEN** the native custom backend SHALL receive intrinsic width based on checkbox marker plus label
+
+### Requirement: Interactive widget content changes invalidate intrinsic layout
+Button and checkbox renderables SHALL invalidate layout when content changes affect intrinsic size.
+
+#### Scenario: Button label change invalidates layout
+- **WHEN** a button label changes and its width depends on intrinsic measurement
+- **THEN** layout SHALL be recomputed before the next render
+
+#### Scenario: Checkbox label change invalidates layout
+- **WHEN** a checkbox label changes and its width depends on intrinsic measurement
+- **THEN** layout SHALL be recomputed before the next render

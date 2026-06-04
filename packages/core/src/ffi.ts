@@ -89,7 +89,7 @@ const lib = backend.loadLibrary(libPath, {
     args: [FFIType.ptr, FFIType.ptr, FFIType.u64, FFIType.bool],
     returns: FFIType.u32,
   },
-  computeTaffyLayout: {
+  computeNativeCustomLayout: {
     args: [
       FFIType.ptr,
       FFIType.u64,
@@ -427,13 +427,13 @@ export const api = {
     width(p: Pointer<Renderer>): number {
       return lib.symbols.width(p);
     },
-    computeTaffyLayout(
+    computeNativeCustomLayout(
       parentIndices: Int32Array,
       styles: Float32Array,
       measurements: Float32Array,
       outRects: Float32Array
     ): number {
-      return lib.symbols.computeTaffyLayout(
+      return lib.symbols.computeNativeCustomLayout(
         backend.ptr(parentIndices),
         BigInt(parentIndices.length),
         backend.ptr(styles),

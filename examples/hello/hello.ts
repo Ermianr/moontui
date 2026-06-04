@@ -1,5 +1,7 @@
 import {
   Box,
+  Button,
+  Checkbox,
   CliRenderer,
   Input,
   rgb,
@@ -15,6 +17,15 @@ const background = terminalDefault();
 const renderer = new CliRenderer();
 renderer.setupTerminal({ useAlternateScreen: true });
 let running = true;
+let accepted = false;
+let submitted = "Not submitted";
+const statusLine = Text({
+  x: 2,
+  y: 6,
+  content: submitted,
+  foregroundColor: white,
+  backgroundColor: background,
+});
 
 renderer.root.add(
   Box(
@@ -22,7 +33,7 @@ renderer.root.add(
       x: 1,
       y: 1,
       width: 32,
-      height: 6,
+      height: 8,
       borderColor: white,
       backgroundColor: background,
       title: " MoonTUI ",
@@ -45,13 +56,35 @@ renderer.root.add(
       focusedBackgroundColor: focused,
       onInput: () => draw(),
     }),
-    Text({
+    Checkbox({
       x: 2,
       y: 4,
-      content: "Press Esc to exit...",
+      label: "Accept terms",
       foregroundColor: white,
       backgroundColor: background,
-    })
+      focusedBackgroundColor: focused,
+      onChange: (checked) => {
+        accepted = checked;
+        submitted = checked ? "Ready to submit" : "Not submitted";
+        statusLine.content = submitted;
+        draw();
+      },
+    }),
+    Button({
+      x: 2,
+      y: 5,
+      label: "Submit",
+      foregroundColor: white,
+      backgroundColor: background,
+      focusedBackgroundColor: focused,
+      disabledForegroundColor: dim,
+      onPress: () => {
+        submitted = accepted ? "Submitted" : "Accept terms first";
+        statusLine.content = submitted;
+        draw();
+      },
+    }),
+    statusLine
   )
 );
 

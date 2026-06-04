@@ -5,9 +5,10 @@ import {
   defaultLayoutEngine,
   type LayoutEngine,
   type LayoutRect,
+  nativeCustomLayoutEngine,
   type Renderable,
   type RootRenderable,
-  taffyLayoutEngine,
+  TypeScriptLayoutEngine,
 } from "../renderable";
 import { CliRenderer, type RenderStats } from "../renderer";
 
@@ -120,7 +121,7 @@ export interface CountingLayoutEngine extends LayoutEngine {
   count(): number;
 }
 
-export type LayoutBackendName = "taffy" | "typescript";
+export type LayoutBackendName = "native-custom" | "typescript-fallback-oracle";
 
 export interface LayoutBackendCase {
   engine: LayoutEngine;
@@ -184,8 +185,11 @@ export function createCountingLayoutEngine(
 
 export function layoutBackendCases(): LayoutBackendCase[] {
   return [
-    { name: "typescript", engine: defaultLayoutEngine },
-    { name: "taffy", engine: taffyLayoutEngine },
+    { name: "native-custom", engine: nativeCustomLayoutEngine },
+    {
+      name: "typescript-fallback-oracle",
+      engine: new TypeScriptLayoutEngine(),
+    },
   ];
 }
 

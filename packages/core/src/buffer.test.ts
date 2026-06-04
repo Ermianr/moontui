@@ -37,6 +37,16 @@ test("buffer drawText places text at coordinates", () => {
   api.renderer.destroyRenderer(rendererPtr);
 });
 
+test("buffer drawText ignores empty text", () => {
+  const rendererPtr = api.renderer.createRenderer(10, 5, true);
+  const bufPtr = api.renderer.getNextBuffer(rendererPtr);
+  const buf = new MoonBuffer(bufPtr, 10, 5);
+
+  expect(() => buf.drawText("", 0, 0, white)).not.toThrow();
+
+  api.renderer.destroyRenderer(rendererPtr);
+});
+
 test("buffer drawChar places single character", () => {
   const { buf, rendererPtr } = createBuffer(5, 5);
   buf.clear(black);

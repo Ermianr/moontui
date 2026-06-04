@@ -1,10 +1,18 @@
 import type { DrawBoxOptions, MoonBuffer } from "./buffer";
 import { api } from "./ffi";
+import type { MouseEvent } from "./mouse";
 import type { KeyEvent } from "./renderer";
 import type { RGBAInput } from "./rgba";
 import { terminalDefault } from "./rgba";
 
 export interface RenderContext {
+  addHitTarget(
+    renderable: Renderable,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void;
   setCursorPosition(x: number, y: number, visible: boolean): void;
 }
 
@@ -60,6 +68,7 @@ export interface RenderableOptions extends LayoutProps {
   onBlur?: (renderable: Renderable) => void;
   onFocus?: (renderable: Renderable) => void;
   onKey?: (event: KeyEvent, renderable: Renderable) => void;
+  onMouse?: (event: MouseEvent, renderable: Renderable) => void;
   x?: number;
   y?: number;
 }
@@ -80,6 +89,10 @@ export class Renderable {
   private readonly _onBlur?: (renderable: Renderable) => void;
   private readonly _onFocus?: (renderable: Renderable) => void;
   private readonly _onKey?: (event: KeyEvent, renderable: Renderable) => void;
+  private readonly _onMouse?: (
+    event: MouseEvent,
+    renderable: Renderable
+  ) => void;
   private readonly _children: Renderable[] = [];
 
   constructor(options: RenderableOptions = {}) {
@@ -90,6 +103,7 @@ export class Renderable {
     this._onBlur = options.onBlur;
     this._onFocus = options.onFocus;
     this._onKey = options.onKey;
+    this._onMouse = options.onMouse;
     this._layoutProps = {
       alignItems: options.alignItems,
       alignSelf: options.alignSelf,
@@ -305,6 +319,11 @@ export class Renderable {
   }
 
   /** @internal */
+  _handleMouse(event: MouseEvent): void {
+    this._onMouse?.(event, this);
+  }
+
+  /** @internal */
   _clearFocusedDeep(): void {
     this._blur();
     for (const child of this._children) {
@@ -330,6 +349,10 @@ export class Renderable {
     const childOffsetX = this._hasComputedLayout ? 0 : x;
     const childOffsetY = this._hasComputedLayout ? 0 : y;
     this.renderSelf(buffer, x, y, context);
+    const hitRect = this.hitRect();
+    if (hitRect.width > 0 && hitRect.height > 0) {
+      context?.addHitTarget(this, x, y, hitRect.width, hitRect.height);
+    }
     this.renderChildren(buffer, childOffsetX, childOffsetY, context);
   }
 
@@ -356,6 +379,20 @@ export class Renderable {
     for (const child of this._children) {
       child.render(buffer, x, y, context);
     }
+  }
+
+  private hitRect(): { width: number; height: number } {
+    if (this._hasComputedLayout) {
+      return {
+        width: this._computedLayout.width,
+        height: this._computedLayout.height,
+      };
+    }
+    const intrinsic = this._measureIntrinsicSize();
+    return {
+      width: numericSize(this.width) || intrinsic.width,
+      height: numericSize(this.height) || intrinsic.height,
+    };
   }
 }
 
@@ -531,24 +568,98 @@ export interface LayoutEngine {
   compute(root: RootRenderable, width: number, height: number): void;
 }
 
+export interface LayoutComputeTimings {
+  ffiInputMs: number;
+  ffiOutputMs: number;
+  flatteningMs: number;
+  nativeComputeMs: number;
+  rectangleApplicationMs: number;
+  relationshipConstructionMs: number;
+  totalBackendMs: number;
+}
+
+export interface LayoutInstrumentationCounters {
+  computeCalls: number;
+  readbackCount: number;
+  rectangleApplications: number;
+  relationshipUpdates: number;
+  styleUpdates: number;
+  touchedNodes: number;
+}
+
+export interface InstrumentedLayoutEngine extends LayoutEngine {
+  getInstrumentationCounters(): LayoutInstrumentationCounters;
+}
+
 export class TypeScriptLayoutEngine implements LayoutEngine {
+  private counters: LayoutInstrumentationCounters = emptyLayoutCounters();
+
   compute(root: RootRenderable, width: number, height: number): void {
+    this.counters = {
+      computeCalls: this.counters.computeCalls + 1,
+      readbackCount: 0,
+      rectangleApplications: countLayoutNodes(root),
+      relationshipUpdates: 0,
+      styleUpdates: countLayoutNodes(root),
+      touchedNodes: countLayoutNodes(root),
+    };
     layoutTree(root, { x: 0, y: 0, width, height }, false);
     root._markLayoutClean();
   }
-}
 
-export const defaultLayoutEngine = new TypeScriptLayoutEngine();
+  getInstrumentationCounters(): LayoutInstrumentationCounters {
+    return { ...this.counters };
+  }
+}
 
 const STYLE_STRIDE = 30;
 const MEASURE_STRIDE = 2;
 const RECT_STRIDE = 4;
 const NAN = Number.NaN;
 
-export class TaffyLayoutEngine implements LayoutEngine {
+export function computeNativeCustomLayout(
+  parentIndices: Int32Array,
+  styles: Float32Array,
+  measurements: Float32Array,
+  outRects: Float32Array
+): number {
+  return api.renderer.computeNativeCustomLayout(
+    parentIndices,
+    styles,
+    measurements,
+    outRects
+  );
+}
+
+type NativeLayoutCompute = (
+  parentIndices: Int32Array,
+  styles: Float32Array,
+  measurements: Float32Array,
+  outRects: Float32Array
+) => number;
+
+abstract class BatchNativeLayoutEngine implements LayoutEngine {
+  protected abstract readonly failureLabel: string;
+  protected abstract readonly computeNativeLayout: NativeLayoutCompute;
+  private counters: LayoutInstrumentationCounters = emptyLayoutCounters();
+
   compute(root: RootRenderable, width: number, height: number): void {
+    this.computeWithTimings(root, width, height);
+  }
+
+  computeWithTimings(
+    root: RootRenderable,
+    width: number,
+    height: number
+  ): LayoutComputeTimings {
+    const totalStart = performance.now();
+    const flatteningStart = performance.now();
     const nodes = flattenLayoutTree(root);
+    const flatteningMs = performance.now() - flatteningStart;
+    const relationshipStart = performance.now();
     const parentIndices = new Int32Array(nodes.length);
+    const relationshipConstructionMs = performance.now() - relationshipStart;
+    const ffiInputStart = performance.now();
     const styles = new Float32Array(nodes.length * STYLE_STRIDE);
     const measurements = new Float32Array(nodes.length * MEASURE_STRIDE);
     const outRects = new Float32Array(nodes.length * RECT_STRIDE);
@@ -560,35 +671,99 @@ export class TaffyLayoutEngine implements LayoutEngine {
       measurements[index * MEASURE_STRIDE] = intrinsic.width;
       measurements[index * MEASURE_STRIDE + 1] = intrinsic.height;
     }
+    const ffiInputMs = performance.now() - ffiInputStart;
 
-    const result = api.renderer.computeTaffyLayout(
+    const nativeComputeStart = performance.now();
+    const result = this.computeNativeLayout(
       parentIndices,
       styles,
       measurements,
       outRects
     );
+    const nativeComputeMs = performance.now() - nativeComputeStart;
     if (result !== 0) {
-      throw new Error(`Taffy layout failed with error code ${result}`);
+      throw new Error(`${this.failureLabel} failed with error code ${result}`);
     }
 
+    const ffiOutputStart = performance.now();
+    const ffiOutputMs = performance.now() - ffiOutputStart;
+    const rectangleApplicationStart = performance.now();
+    let rectangleApplications = 0;
     for (const [index, item] of nodes.entries()) {
       if (item.node.layoutProps.display === "none") {
         item.node._clearComputedLayout();
         continue;
       }
       const rectOffset = index * RECT_STRIDE;
+      if (Number.isNaN(outRects[rectOffset] ?? Number.NaN)) {
+        item.node._clearComputedLayout();
+        continue;
+      }
       item.node._setComputedLayout({
         x: outRects[rectOffset] ?? 0,
         y: outRects[rectOffset + 1] ?? 0,
         width: outRects[rectOffset + 2] ?? 0,
         height: outRects[rectOffset + 3] ?? 0,
       });
+      rectangleApplications++;
     }
     root._markLayoutClean();
+    const rectangleApplicationMs =
+      performance.now() - rectangleApplicationStart;
+    this.counters = {
+      computeCalls: this.counters.computeCalls + 1,
+      readbackCount: nodes.length,
+      rectangleApplications,
+      relationshipUpdates: nodes.length,
+      styleUpdates: nodes.length,
+      touchedNodes: nodes.length,
+    };
+    return {
+      ffiInputMs,
+      ffiOutputMs,
+      flatteningMs,
+      nativeComputeMs,
+      rectangleApplicationMs,
+      relationshipConstructionMs,
+      totalBackendMs: performance.now() - totalStart,
+    };
+  }
+
+  getInstrumentationCounters(): LayoutInstrumentationCounters {
+    return { ...this.counters };
   }
 }
 
-export const taffyLayoutEngine = new TaffyLayoutEngine();
+export class NativeCustomLayoutEngine extends BatchNativeLayoutEngine {
+  protected readonly computeNativeLayout = computeNativeCustomLayout;
+  protected readonly failureLabel = "Native custom layout";
+}
+
+export const nativeCustomLayoutEngine = new NativeCustomLayoutEngine();
+export const defaultLayoutEngine = nativeCustomLayoutEngine;
+
+export function emptyLayoutCounters(): LayoutInstrumentationCounters {
+  return {
+    computeCalls: 0,
+    readbackCount: 0,
+    rectangleApplications: 0,
+    relationshipUpdates: 0,
+    styleUpdates: 0,
+    touchedNodes: 0,
+  };
+}
+
+function countLayoutNodes(root: Renderable): number {
+  let count = 0;
+  const visit = (node: Renderable): void => {
+    count++;
+    for (const child of node.children) {
+      visit(child);
+    }
+  };
+  visit(root);
+  return count;
+}
 
 // Unsupported layout domains are intentionally absent from LayoutProps:
 // grid, transforms, wrapping, z-index layout semantics, and percentage margins.
@@ -1159,6 +1334,324 @@ export class InputRenderable extends Renderable {
   }
 }
 
+export interface ButtonRenderableOptions extends RenderableOptions {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  disabledBackgroundColor?: RGBAInput;
+  disabledForegroundColor?: RGBAInput;
+  focusedBackgroundColor?: RGBAInput;
+  focusedForegroundColor?: RGBAInput;
+  foregroundColor?: RGBAInput;
+  label: string;
+  onPress?: () => void;
+}
+
+export class ButtonRenderable extends Renderable {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  disabledBackgroundColor?: RGBAInput;
+  disabledForegroundColor: RGBAInput;
+  focusedBackgroundColor?: RGBAInput;
+  focusedForegroundColor?: RGBAInput;
+  foregroundColor: RGBAInput;
+  private _label: string;
+  private readonly _onPress?: () => void;
+
+  constructor(options: ButtonRenderableOptions) {
+    super({
+      ...options,
+      focusable: options.focusable ?? !options.disabled,
+      height: options.height ?? 1,
+      width: options.width,
+    });
+    this._label = options.label;
+    this.foregroundColor = options.foregroundColor ?? terminalDefault();
+    this.backgroundColor = options.backgroundColor;
+    this.focusedForegroundColor = options.focusedForegroundColor;
+    this.focusedBackgroundColor = options.focusedBackgroundColor;
+    this.disabledForegroundColor =
+      options.disabledForegroundColor ?? this.foregroundColor;
+    this.disabledBackgroundColor = options.disabledBackgroundColor;
+    this.attributes = options.attributes;
+    this._onPress = options.onPress;
+  }
+
+  get label(): string {
+    return this._label;
+  }
+
+  set label(value: string) {
+    if (value === this._label) {
+      return;
+    }
+    this._label = value;
+    if (this.layoutProps.width === undefined) {
+      this.markLayoutDirty();
+    }
+  }
+
+  override _measureIntrinsicSize(): LayoutRect {
+    return {
+      x: 0,
+      y: 0,
+      width: terminalCellWidth(this.visibleLabel()),
+      height: 1,
+    };
+  }
+
+  /** @internal */
+  override _handleKey(event: KeyEvent): void {
+    if (this.isActivationKey(event)) {
+      this.press();
+      event.stopPropagation();
+      return;
+    }
+    super._handleKey(event);
+  }
+
+  /** @internal */
+  override _handleMouse(event: MouseEvent): void {
+    if (event.kind === "down" && event.button === "left") {
+      this.press();
+      event.stopPropagation();
+      return;
+    }
+    super._handleMouse(event);
+  }
+
+  protected override renderSelf(
+    buffer: MoonBuffer,
+    x: number,
+    y: number
+  ): void {
+    const layout = this.computedLayout;
+    const width = this.layoutComputed
+      ? layout.width
+      : numericSize(this.width) || this._measureIntrinsicSize().width;
+    const height = this.layoutComputed
+      ? layout.height
+      : numericSize(this.height) || this._measureIntrinsicSize().height;
+    const style = this.currentStyle();
+    if (style.backgroundColor && width > 0 && height > 0) {
+      buffer.fillRect(x, y, width, height, style.backgroundColor);
+    }
+    if (width <= 0) {
+      return;
+    }
+    buffer.drawText(
+      [...this.visibleLabel()].slice(0, width).join(""),
+      x,
+      y,
+      style.foregroundColor,
+      style.backgroundColor,
+      this.attributes
+    );
+  }
+
+  private currentStyle(): {
+    backgroundColor?: RGBAInput;
+    foregroundColor: RGBAInput;
+  } {
+    if (this.disabled) {
+      return {
+        foregroundColor: this.disabledForegroundColor,
+        backgroundColor: this.disabledBackgroundColor ?? this.backgroundColor,
+      };
+    }
+    if (this.focused) {
+      return {
+        foregroundColor: this.focusedForegroundColor ?? this.foregroundColor,
+        backgroundColor: this.focusedBackgroundColor ?? this.backgroundColor,
+      };
+    }
+    return {
+      foregroundColor: this.foregroundColor,
+      backgroundColor: this.backgroundColor,
+    };
+  }
+
+  private isActivationKey(event: KeyEvent): boolean {
+    const key = event.key.toLowerCase();
+    return key === "enter" || event.key === " ";
+  }
+
+  private press(): void {
+    if (this.disabled) {
+      return;
+    }
+    this._onPress?.();
+  }
+
+  private visibleLabel(): string {
+    return `[ ${this._label} ]`;
+  }
+}
+
+export interface CheckboxRenderableOptions extends RenderableOptions {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  checked?: boolean;
+  disabledBackgroundColor?: RGBAInput;
+  disabledForegroundColor?: RGBAInput;
+  focusedBackgroundColor?: RGBAInput;
+  focusedForegroundColor?: RGBAInput;
+  foregroundColor?: RGBAInput;
+  label: string;
+  onChange?: (checked: boolean) => void;
+}
+
+export class CheckboxRenderable extends Renderable {
+  attributes?: number;
+  backgroundColor?: RGBAInput;
+  disabledBackgroundColor?: RGBAInput;
+  disabledForegroundColor: RGBAInput;
+  focusedBackgroundColor?: RGBAInput;
+  focusedForegroundColor?: RGBAInput;
+  foregroundColor: RGBAInput;
+  private _checked: boolean;
+  private _label: string;
+  private readonly _onChange?: (checked: boolean) => void;
+
+  constructor(options: CheckboxRenderableOptions) {
+    super({
+      ...options,
+      focusable: options.focusable ?? !options.disabled,
+      height: options.height ?? 1,
+      width: options.width,
+    });
+    this._checked = options.checked ?? false;
+    this._label = options.label;
+    this.foregroundColor = options.foregroundColor ?? terminalDefault();
+    this.backgroundColor = options.backgroundColor;
+    this.focusedForegroundColor = options.focusedForegroundColor;
+    this.focusedBackgroundColor = options.focusedBackgroundColor;
+    this.disabledForegroundColor =
+      options.disabledForegroundColor ?? this.foregroundColor;
+    this.disabledBackgroundColor = options.disabledBackgroundColor;
+    this.attributes = options.attributes;
+    this._onChange = options.onChange;
+  }
+
+  get checked(): boolean {
+    return this._checked;
+  }
+
+  set checked(value: boolean) {
+    this._checked = value;
+  }
+
+  get label(): string {
+    return this._label;
+  }
+
+  set label(value: string) {
+    if (value === this._label) {
+      return;
+    }
+    this._label = value;
+    if (this.layoutProps.width === undefined) {
+      this.markLayoutDirty();
+    }
+  }
+
+  override _measureIntrinsicSize(): LayoutRect {
+    return {
+      x: 0,
+      y: 0,
+      width: terminalCellWidth(this.visibleLabel()),
+      height: 1,
+    };
+  }
+
+  /** @internal */
+  override _handleKey(event: KeyEvent): void {
+    if (this.isActivationKey(event)) {
+      this.toggle();
+      event.stopPropagation();
+      return;
+    }
+    super._handleKey(event);
+  }
+
+  /** @internal */
+  override _handleMouse(event: MouseEvent): void {
+    if (event.kind === "down" && event.button === "left") {
+      this.toggle();
+      event.stopPropagation();
+      return;
+    }
+    super._handleMouse(event);
+  }
+
+  protected override renderSelf(
+    buffer: MoonBuffer,
+    x: number,
+    y: number
+  ): void {
+    const layout = this.computedLayout;
+    const width = this.layoutComputed
+      ? layout.width
+      : numericSize(this.width) || this._measureIntrinsicSize().width;
+    const height = this.layoutComputed
+      ? layout.height
+      : numericSize(this.height) || this._measureIntrinsicSize().height;
+    const style = this.currentStyle();
+    if (style.backgroundColor && width > 0 && height > 0) {
+      buffer.fillRect(x, y, width, height, style.backgroundColor);
+    }
+    if (width <= 0) {
+      return;
+    }
+    buffer.drawText(
+      [...this.visibleLabel()].slice(0, width).join(""),
+      x,
+      y,
+      style.foregroundColor,
+      style.backgroundColor,
+      this.attributes
+    );
+  }
+
+  private currentStyle(): {
+    backgroundColor?: RGBAInput;
+    foregroundColor: RGBAInput;
+  } {
+    if (this.disabled) {
+      return {
+        foregroundColor: this.disabledForegroundColor,
+        backgroundColor: this.disabledBackgroundColor ?? this.backgroundColor,
+      };
+    }
+    if (this.focused) {
+      return {
+        foregroundColor: this.focusedForegroundColor ?? this.foregroundColor,
+        backgroundColor: this.focusedBackgroundColor ?? this.backgroundColor,
+      };
+    }
+    return {
+      foregroundColor: this.foregroundColor,
+      backgroundColor: this.backgroundColor,
+    };
+  }
+
+  private isActivationKey(event: KeyEvent): boolean {
+    const key = event.key.toLowerCase();
+    return key === "enter" || event.key === " ";
+  }
+
+  private toggle(): void {
+    if (this.disabled) {
+      return;
+    }
+    this._checked = !this._checked;
+    this._onChange?.(this._checked);
+  }
+
+  private visibleLabel(): string {
+    return `${this._checked ? "[x]" : "[ ]"} ${this._label}`;
+  }
+}
+
 function clampIndex(index: number, value: string): number {
   return Math.max(0, Math.min(Math.floor(index), [...value].length));
 }
@@ -1218,4 +1711,14 @@ export function Box(
 
 export function Input(options: InputRenderableOptions = {}): InputRenderable {
   return new InputRenderable(options);
+}
+
+export function Button(options: ButtonRenderableOptions): ButtonRenderable {
+  return new ButtonRenderable(options);
+}
+
+export function Checkbox(
+  options: CheckboxRenderableOptions
+): CheckboxRenderable {
+  return new CheckboxRenderable(options);
 }

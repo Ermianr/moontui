@@ -4,6 +4,12 @@ import { api } from "./ffi";
 import {
   Box as PublicBox,
   BoxRenderable as PublicBoxRenderable,
+  Button as PublicButton,
+  ButtonRenderable as PublicButtonRenderable,
+  type ButtonRenderableOptions as PublicButtonRenderableOptions,
+  Checkbox as PublicCheckbox,
+  CheckboxRenderable as PublicCheckboxRenderable,
+  type CheckboxRenderableOptions as PublicCheckboxRenderableOptions,
   Input as PublicInput,
   InputRenderable as PublicInputRenderable,
   type InputRenderableOptions as PublicInputRenderableOptions,
@@ -15,18 +21,27 @@ import {
 import {
   Box,
   BoxRenderable,
+  Button,
+  ButtonRenderable,
+  Checkbox,
+  CheckboxRenderable,
+  defaultLayoutEngine,
   Input,
   InputRenderable,
+  nativeCustomLayoutEngine,
   Renderable,
   RootRenderable,
   Text,
   TextRenderable,
+  TypeScriptLayoutEngine,
 } from "./renderable";
+import { KeyEvent } from "./renderer";
 import {
   assertLayoutRect,
   createCountingLayoutEngine,
   createSpy,
   createTestRenderer,
+  layoutBackendCases,
 } from "./testing/index";
 
 const white = { r: 255, g: 255, b: 255, a: 255 };
@@ -327,6 +342,32 @@ test("clean and dirty frame layout recomputation is observable through harness",
   renderer.destroy();
 });
 
+test("default layout engine is native custom", () => {
+  expect(defaultLayoutEngine).toBe(nativeCustomLayoutEngine);
+});
+
+test("test harness exposes TypeScript layout only as fallback oracle", () => {
+  expect(layoutBackendCases().map((item) => item.name)).toEqual([
+    "native-custom",
+    "typescript-fallback-oracle",
+  ]);
+});
+
+test("renderer accepts explicit internal TypeScript fallback layout engine", () => {
+  const layoutEngine = createCountingLayoutEngine(new TypeScriptLayoutEngine());
+  const { renderer } = createTestRenderer({
+    width: 20,
+    height: 5,
+    layoutEngine,
+  });
+
+  renderer.root.add(Text({ content: "a" }));
+  renderer.render();
+
+  expect(layoutEngine.count()).toBe(1);
+  renderer.destroy();
+});
+
 test("absolute positioned children do not consume normal flow space", () => {
   const root = new RootRenderable(20, 5);
   const absolute = new TextRenderable({
@@ -369,11 +410,19 @@ test("public API exports renderable symbols", () => {
   expect(PublicTextRenderable).toBe(TextRenderable);
   expect(PublicBoxRenderable).toBe(BoxRenderable);
   expect(PublicInputRenderable).toBe(InputRenderable);
+  expect(PublicButtonRenderable).toBe(ButtonRenderable);
+  expect(PublicCheckboxRenderable).toBe(CheckboxRenderable);
   expect(PublicText).toBe(Text);
   expect(PublicBox).toBe(Box);
   expect(PublicInput).toBe(Input);
+  expect(PublicButton).toBe(Button);
+  expect(PublicCheckbox).toBe(Checkbox);
   const options: PublicInputRenderableOptions = { placeholder: "Name" };
+  const buttonOptions: PublicButtonRenderableOptions = { label: "Save" };
+  const checkboxOptions: PublicCheckboxRenderableOptions = { label: "Accept" };
   expect(options.placeholder).toBe("Name");
+  expect(buttonOptions.label).toBe("Save");
+  expect(checkboxOptions.label).toBe("Accept");
 });
 
 test("input helper creates a focusable input renderable", () => {
@@ -391,6 +440,236 @@ test("input participates in focus traversal by default", () => {
 
   expect(renderer.focusNext()).toBe(first);
   expect(renderer.focusNext()).toBe(input);
+  renderer.destroy();
+});
+
+test("interactive widget helpers create focusable renderables", () => {
+  const button = Button({ label: "Save" });
+  const checkbox = Checkbox({ label: "Accept" });
+
+  expect(button).toBeInstanceOf(ButtonRenderable);
+  expect(button.focusable).toBe(true);
+  expect(checkbox).toBeInstanceOf(CheckboxRenderable);
+  expect(checkbox.focusable).toBe(true);
+});
+
+test("button renders normal focused and disabled styles", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 3,
+  });
+  const normal = { r: 1, g: 0, b: 0, a: 255 };
+  const focused = { r: 2, g: 0, b: 0, a: 255 };
+  const disabled = { r: 3, g: 0, b: 0, a: 255 };
+  const button = Button({
+    label: "Save",
+    foregroundColor: normal,
+    focusedForegroundColor: focused,
+    disabledForegroundColor: disabled,
+  });
+  renderer.root.add(button);
+
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[ Save ]")?.fg
+      .r
+  ).toBe(normal.r);
+
+  renderer.focus(button);
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[ Save ]")?.fg
+      .r
+  ).toBe(focused.r);
+
+  button.disabled = true;
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[ Save ]")?.fg
+      .r
+  ).toBe(disabled.r);
+  renderer.destroy();
+});
+
+test("checkbox renders checked states and focused disabled styles", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 3,
+  });
+  const normal = { r: 1, g: 0, b: 0, a: 255 };
+  const focused = { r: 2, g: 0, b: 0, a: 255 };
+  const disabled = { r: 3, g: 0, b: 0, a: 255 };
+  const checkbox = Checkbox({
+    label: "Accept",
+    foregroundColor: normal,
+    focusedForegroundColor: focused,
+    disabledForegroundColor: disabled,
+  });
+  renderer.root.add(checkbox);
+
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[ ] Accept")
+      ?.fg.r
+  ).toBe(normal.r);
+
+  checkbox.checked = true;
+  renderer.focus(checkbox);
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[x] Accept")
+      ?.fg.r
+  ).toBe(focused.r);
+
+  checkbox.disabled = true;
+  await renderOnce();
+  expect(
+    captureSpans().lines[0]?.spans.find((span) => span.text === "[x] Accept")
+      ?.fg.r
+  ).toBe(disabled.r);
+  renderer.destroy();
+});
+
+test("interactive widgets provide intrinsic measurements and invalidate on label changes", () => {
+  const root = new RootRenderable(40, 5);
+  const button = Button({ label: "Save" });
+  const checkbox = Checkbox({ label: "Accept" });
+  root.setLayoutProps({ flexDirection: "row", gap: 1, alignItems: "start" });
+  root.add(button).add(checkbox);
+  defaultLayoutEngine.compute(root, 40, 5);
+
+  expect(button._measureIntrinsicSize().width).toBe(8);
+  expect(checkbox._measureIntrinsicSize().width).toBe(10);
+  expect(button.computedLayout.width).toBe(8);
+  expect(checkbox.computedLayout.width).toBe(10);
+
+  button.label = "Submit";
+  expect(root.layoutDirty).toBe(true);
+  root.computeLayout(40, 5);
+  checkbox.label = "Terms";
+  expect(root.layoutDirty).toBe(true);
+});
+
+test("focus traversal reaches enabled interactive widgets and skips disabled ones", () => {
+  const { renderer } = createTestRenderer({ autoFocus: false });
+  const first = Text({ content: "A", focusable: true });
+  const disabledButton = Button({ label: "Disabled", disabled: true });
+  const button = Button({ label: "Save" });
+  const disabledCheckbox = Checkbox({ label: "Skip", disabled: true });
+  const checkbox = Checkbox({ label: "Accept" });
+  renderer.root
+    .add(first)
+    .add(disabledButton)
+    .add(button)
+    .add(disabledCheckbox)
+    .add(checkbox);
+
+  expect(renderer.focusNext()).toBe(first);
+  expect(renderer.focusNext()).toBe(button);
+  expect(renderer.focusNext()).toBe(checkbox);
+  expect(renderer.focus(disabledButton)).toBe(false);
+  expect(renderer.focus(disabledCheckbox)).toBe(false);
+  renderer.destroy();
+});
+
+test("button keyboard activation consumes handled keys", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const onPress = createSpy();
+  const globalKey = createSpy();
+  const button = Button({ label: "Save", onPress });
+  renderer.root.add(button);
+  renderer.focus(button);
+  renderer.on("key", globalKey);
+
+  mockInput.pressEnter();
+  mockInput.pressKey(" ");
+
+  expect(onPress.callCount()).toBe(2);
+  expect(globalKey.callCount()).toBe(0);
+  renderer.destroy();
+});
+
+test("checkbox keyboard activation toggles and consumes handled keys", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const onChange = createSpy();
+  const globalKey = createSpy();
+  const checkbox = Checkbox({ label: "Accept", onChange });
+  renderer.root.add(checkbox);
+  renderer.focus(checkbox);
+  renderer.on("key", globalKey);
+
+  mockInput.pressEnter();
+  expect(checkbox.checked).toBe(true);
+  mockInput.pressKey(" ");
+
+  expect(checkbox.checked).toBe(false);
+  expect(onChange.calls).toEqual([[true], [false]]);
+  expect(globalKey.callCount()).toBe(0);
+  renderer.destroy();
+});
+
+test("interactive widgets activate through hit-tested mouse dispatch", async () => {
+  const buttonPress = createSpy();
+  const checkboxChange = createSpy();
+  const { renderer, renderOnce, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 30,
+    height: 4,
+  });
+  const button = Button({ label: "Save", onPress: buttonPress });
+  const checkbox = Checkbox({ label: "Accept", onChange: checkboxChange });
+  renderer.root.setLayoutProps({ flexDirection: "column" });
+  renderer.root.add(button).add(checkbox);
+  await renderOnce();
+
+  mockMouse.click(1, 0);
+  mockMouse.click(1, 1);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(buttonPress.callCount()).toBe(1);
+  expect(checkbox.checked).toBe(true);
+  expect(checkboxChange.calledWith(true)).toBe(true);
+  renderer.destroy();
+});
+
+test("disabled interactive widgets ignore keyboard and mouse activation", async () => {
+  const buttonPress = createSpy();
+  const checkboxChange = createSpy();
+  const { renderer, renderOnce, mockInput, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 30,
+    height: 4,
+  });
+  const button = Button({
+    label: "Save",
+    disabled: true,
+    onPress: buttonPress,
+  });
+  const checkbox = Checkbox({
+    label: "Accept",
+    disabled: true,
+    onChange: checkboxChange,
+  });
+  renderer.root.setLayoutProps({ flexDirection: "column" });
+  renderer.root.add(button).add(checkbox);
+
+  button._handleKey(
+    new KeyEvent("enter", { ctrl: false, shift: false, alt: false })
+  );
+  checkbox._handleKey(
+    new KeyEvent(" ", { ctrl: false, shift: false, alt: false })
+  );
+  await renderOnce();
+  mockMouse.click(1, 0);
+  mockMouse.click(1, 1);
+  mockInput.pressEnter();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(buttonPress.callCount()).toBe(0);
+  expect(checkbox.checked).toBe(false);
+  expect(checkboxChange.callCount()).toBe(0);
   renderer.destroy();
 });
 
@@ -443,6 +722,82 @@ test("input inserts printable keys at the cursor", () => {
 
   expect(input.value).toBe("abc");
   expect(input.cursorIndex).toBe(2);
+  renderer.destroy();
+});
+
+test("input can be focused by left mouse click before typing", async () => {
+  const { renderer, renderOnce, mockInput, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 4,
+  });
+  const input = Input({ value: "", x: 2, y: 1, width: 8 });
+  renderer.root.add(input);
+  await renderOnce();
+
+  mockMouse.click(3, 1);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  mockInput.pressKey("K");
+
+  expect(renderer.focused).toBe(input);
+  expect(input.value).toBe("K");
+  renderer.destroy();
+});
+
+test("mouse click outside focusable targets clears focus", async () => {
+  const { renderer, renderOnce, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 4,
+  });
+  const enabled = Input({ value: "", x: 2, y: 1, width: 8 });
+  const box = Box({ x: 2, y: 2, width: 8, height: 1 });
+  renderer.root.add(enabled).add(box);
+  renderer.focus(enabled);
+  await renderOnce();
+
+  mockMouse.click(3, 2);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(renderer.focused).toBeNull();
+  renderer.destroy();
+});
+
+test("mouse click on disabled focusable target clears focus", async () => {
+  const { renderer, renderOnce, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 4,
+  });
+  const enabled = Input({ value: "", x: 2, y: 1, width: 8 });
+  const disabled = Input({ value: "", x: 2, y: 2, width: 8, disabled: true });
+  renderer.root.add(enabled).add(disabled);
+  renderer.focus(enabled);
+  await renderOnce();
+
+  mockMouse.click(3, 2);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(renderer.focused).toBeNull();
+  renderer.destroy();
+});
+
+test("mouse click focuses button before activation", async () => {
+  const onPress = createSpy();
+  const { renderer, renderOnce, mockMouse } = createTestRenderer({
+    autoFocus: false,
+    width: 20,
+    height: 4,
+  });
+  const button = Button({ label: "Save", x: 2, y: 1, onPress });
+  renderer.root.add(button);
+  await renderOnce();
+
+  mockMouse.click(3, 1);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  expect(renderer.focused).toBe(button);
+  expect(onPress.callCount()).toBe(1);
   renderer.destroy();
 });
 
@@ -583,5 +938,24 @@ test("focused input sets captured cursor position", async () => {
   await renderOnce();
 
   expect(captureSpans().cursor).toEqual([7, 2]);
+  renderer.destroy();
+});
+
+test("blurred input clears captured cursor visibility on next render", async () => {
+  const { renderer, renderOnce, captureSpans } = createTestRenderer({
+    autoFocus: false,
+    width: 16,
+    height: 4,
+  });
+  const input = Input({ value: "abc", x: 4, y: 2, width: 8 });
+  renderer.root.add(input);
+  renderer.focus(input);
+  await renderOnce();
+  expect(captureSpans().cursor).toEqual([7, 2]);
+
+  renderer.blur();
+  await renderOnce();
+
+  expect(captureSpans().cursor).toEqual([0, 0]);
   renderer.destroy();
 });

@@ -32,7 +32,6 @@
   "engines": {
     "bun": ">=1.3.0"
   },
-  "dependencies": {},
   "devDependencies": {
     "@moontui/config": "workspace:*",
     "typescript": "^6.0.3",

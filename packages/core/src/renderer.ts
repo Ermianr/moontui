@@ -23,6 +23,7 @@ import {
   defaultLayoutEngine,
   type LayoutEngine,
   type Renderable,
+  type RenderContext,
   RootRenderable,
 } from "./renderable";
 
@@ -101,7 +102,7 @@ export interface RendererEvents {
   resize: [ResizeEvent];
 }
 
-export class CliRenderer {
+export class CliRenderer implements RenderContext {
   readonly root: RootRenderable;
   private readonly _ptr: Pointer<Renderer>;
   private _width: number;
@@ -120,6 +121,9 @@ export class CliRenderer {
   private readonly _focusManager: FocusManager;
   private readonly _useAlternateScreen: boolean;
   private readonly _layoutEngine: LayoutEngine;
+  private readonly _hitIds = new WeakMap<Renderable, number>();
+  private readonly _hitTargets = new Map<number, Renderable>();
+  private _nextHitId = 1;
 
   constructor(options: InternalRendererOptions = {}) {
     const size = api.terminal.getTerminalSize();
@@ -189,24 +193,7 @@ export class CliRenderer {
             if (!kind) {
               return;
             }
-            this._emitter.emit(
-              "mouse",
-              new MoonMouseEvent({
-                kind,
-                button: buttonFromNative(raw.button),
-                x: raw.x,
-                y: raw.y,
-                modifiers: {
-                  ctrl: raw.ctrl,
-                  shift: raw.shift,
-                  alt: raw.alt,
-                },
-                scroll:
-                  kind === "scroll"
-                    ? { direction: scrollDirectionFromNative(raw.scrollDir) }
-                    : undefined,
-              })
-            );
+            this.dispatchMouseEvent(this.createMouseEvent(raw, kind));
           });
         }
       );
@@ -279,6 +266,9 @@ export class CliRenderer {
     if (this.root.layoutDirty) {
       this._layoutEngine.compute(this.root, this._width, this._height);
     }
+    api.renderer.hitGridClear(this._ptr);
+    this._hitTargets.clear();
+    this.setCursorPosition(0, 0, false);
     this.root.render(this.getNextBuffer(), 0, 0, this);
     const result = api.renderer.render(this._ptr, force);
     if (result !== 0) {
@@ -308,6 +298,68 @@ export class CliRenderer {
     if (!event.propagationStopped) {
       this._emitter.emit("key", event);
     }
+  }
+
+  private createMouseEvent(
+    raw: {
+      button: number;
+      x: number;
+      y: number;
+      ctrl: boolean;
+      shift: boolean;
+      alt: boolean;
+      scrollDir: number;
+    },
+    kind: Exclude<MoonMouseEvent["kind"], "drag-end" | "drop" | "over" | "out">
+  ): MoonMouseEvent {
+    const target = this.resolveMouseTarget(raw.x, raw.y);
+    return new MoonMouseEvent({
+      kind,
+      button: buttonFromNative(raw.button),
+      x: raw.x,
+      y: raw.y,
+      modifiers: {
+        ctrl: raw.ctrl,
+        shift: raw.shift,
+        alt: raw.alt,
+      },
+      scroll:
+        kind === "scroll"
+          ? { direction: scrollDirectionFromNative(raw.scrollDir) }
+          : undefined,
+      target,
+    });
+  }
+
+  private dispatchMouseEvent(event: MoonMouseEvent): void {
+    if (event.kind === "down" && event.button === "left") {
+      this.focusMouseTarget(event.target);
+    }
+    if (event.target && event.target instanceof RootRenderable === false) {
+      const target = event.target as Renderable;
+      target._handleMouse(event);
+    }
+    if (!event.propagationStopped) {
+      this._emitter.emit("mouse", event);
+    }
+  }
+
+  private focusMouseTarget(target: unknown | null): void {
+    if (target instanceof RootRenderable || !target) {
+      this._focusManager.blur();
+      return;
+    }
+    const renderable = target as Renderable;
+    if (renderable.focusable && !renderable.disabled) {
+      this._focusManager.focus(renderable);
+      return;
+    }
+    this._focusManager.blur();
+  }
+
+  private resolveMouseTarget(x: number, y: number): Renderable | null {
+    const id = this.checkHit(x, y);
+    return this._hitTargets.get(id) ?? null;
   }
 
   private ensureAutoFocus(): void {
@@ -446,20 +498,7 @@ export class CliRenderer {
           if (!kind) {
             return;
           }
-          this._emitter.emit(
-            "mouse",
-            new MoonMouseEvent({
-              kind,
-              button: buttonFromNative(raw.button),
-              x: raw.x,
-              y: raw.y,
-              modifiers: { ctrl: raw.ctrl, shift: raw.shift, alt: raw.alt },
-              scroll:
-                kind === "scroll"
-                  ? { direction: scrollDirectionFromNative(raw.scrollDir) }
-                  : undefined,
-            })
-          );
+          this.dispatchMouseEvent(this.createMouseEvent(raw, kind));
         });
       });
       api.events.setMouseCallback(this._ptr, this._mouseCallback.ptr);
@@ -496,6 +535,24 @@ export class CliRenderer {
   ): void {
     this.guard();
     api.renderer.hitGridAdd(this._ptr, x, y, width, height, id);
+  }
+
+  addHitTarget(
+    renderable: Renderable,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    this.guard();
+    let id = this._hitIds.get(renderable);
+    if (id === undefined) {
+      id = this._nextHitId;
+      this._nextHitId++;
+      this._hitIds.set(renderable, id);
+    }
+    this._hitTargets.set(id, renderable);
+    this.addToHitGrid(x, y, width, height, id);
   }
 
   checkHit(x: number, y: number): number {

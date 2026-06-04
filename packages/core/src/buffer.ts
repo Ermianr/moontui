@@ -113,7 +113,7 @@ export class MoonBuffer {
     bgColor?: RGBAInput,
     attributes?: number
   ): void {
-    if (y >= this.height) {
+    if (text.length === 0 || y >= this.height) {
       return;
     }
     api.buffer.bufferDrawText(

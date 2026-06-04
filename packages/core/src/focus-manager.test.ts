@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Box, Text } from "./renderable";
+import { Box, Input, Text } from "./renderable";
 import { createSpy, createTestRenderer } from "./testing/index";
 
 test("renderer focuses, blurs, and replaces focused renderables", () => {
@@ -79,6 +79,47 @@ test("tab and shift tab move focus and consume global key delivery", () => {
   mockInput.pressKey("tab", { shift: true });
   expect(renderer.focused).toBe(first);
   expect(globalKey.callCount()).toBe(0);
+  renderer.destroy();
+});
+
+test("tab traversal runs before focused input key handling", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const input = Input({ value: "" });
+  const next = Text({ content: "Next", focusable: true });
+  renderer.root.add(input).add(next);
+  renderer.focus(input);
+
+  mockInput.pressKey("Tab");
+
+  expect(input.value).toBe("");
+  expect(renderer.focused).toBe(next);
+  renderer.destroy();
+});
+
+test("terminal tab character traverses focus instead of entering input text", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const input = Input({ value: "" });
+  const next = Text({ content: "Next", focusable: true });
+  renderer.root.add(input).add(next);
+  renderer.focus(input);
+
+  mockInput.pressKey("\t");
+
+  expect(input.value).toBe("");
+  expect(renderer.focused).toBe(next);
+  renderer.destroy();
+});
+
+test("backtab traverses focus backward", () => {
+  const { renderer, mockInput } = createTestRenderer({ autoFocus: false });
+  const first = Text({ content: "First", focusable: true });
+  const input = Input({ value: "" });
+  renderer.root.add(first).add(input);
+  renderer.focus(input);
+
+  mockInput.pressKey("BackTab");
+
+  expect(renderer.focused).toBe(first);
   renderer.destroy();
 });
 

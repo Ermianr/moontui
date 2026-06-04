@@ -45,21 +45,21 @@ export class FocusManager {
 
   dispatchKey(event: KeyEvent): void {
     this.invalidateDetachedFocus();
+    if (isTabTraversalKey(event)) {
+      if (event.modifiers.shift || event.key.toLowerCase() === "backtab") {
+        this.focusPrevious();
+      } else {
+        this.focusNext();
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     this._focused?._handleKey(event);
     if (event.defaultPrevented) {
       return;
     }
-    if (event.key.toLowerCase() !== "tab") {
-      return;
-    }
-
-    if (event.modifiers.shift) {
-      this.focusPrevious();
-    } else {
-      this.focusNext();
-    }
-    event.preventDefault();
-    event.stopPropagation();
   }
 
   firstFocusable(): Renderable | null {
@@ -140,4 +140,9 @@ function isDescendantOf(renderable: Renderable, root: Renderable): boolean {
     return true;
   }
   return isDescendantOf(renderable.parent, root);
+}
+
+function isTabTraversalKey(event: KeyEvent): boolean {
+  const key = event.key.toLowerCase();
+  return key === "tab" || key === "backtab" || event.key === "\t";
 }
